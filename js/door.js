@@ -40,18 +40,16 @@
     var btn = $('btnDoor');
     if (btn) {
       btn.onclick = function () {
-        btn.disabled = true;
         $('ok').hidden = true;
         $('err').hidden = true;
-        Status.during(I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token })).then(function () {
-          $('ok').hidden = false;
-          $('ok').textContent = I18n.t('doorOpened');
-          btn.disabled = false;
-        }).catch(function (e) {
-          btn.disabled = false;
-          $('err').hidden = false;
-          $('err').textContent = e.message || I18n.t('error');
-        });
+        Status.button(btn, I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token }))
+          .then(function () {
+            $('ok').hidden = false;
+            $('ok').textContent = I18n.t('doorOpened');
+          }).catch(function (e) {
+            $('err').hidden = false;
+            $('err').textContent = e.message || I18n.t('error');
+          });
       };
     }
   }

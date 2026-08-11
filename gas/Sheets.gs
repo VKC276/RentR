@@ -53,6 +53,47 @@ function getSpreadsheet_() {
   return ssCache_;
 }
 
+/**
+ * Read-through cache for whole API results, shared across requests.
+ *
+ * Keys embed a data version that every write bumps, so a change is visible
+ * immediately instead of after a TTL. Losing the version from cache only
+ * causes a miss, never a stale answer.
+ */
+var DATA_VERSION_KEY = 'dataVersion';
+var RESULT_TTL_SEC = 300;
+
+function dataVersion_() {
+  var cache = CacheService.getScriptCache();
+  var v = cache.get(DATA_VERSION_KEY);
+  if (!v) {
+    v = String(Date.now());
+    try { cache.put(DATA_VERSION_KEY, v, 21600); } catch (e) { /* best effort */ }
+  }
+  return v;
+}
+
+function bumpDataVersion_() {
+  try {
+    CacheService.getScriptCache()
+      .put(DATA_VERSION_KEY, Date.now() + '-' + Math.floor(Math.random() * 1e6), 21600);
+  } catch (e) { /* best effort */ }
+}
+
+function cachedResult_(name, produce, ttlSec) {
+  var cache = CacheService.getScriptCache();
+  var key = 'r' + dataVersion_() + '_' + name;
+  var hit = cache.get(key);
+  if (hit) {
+    try { return JSON.parse(hit); } catch (e) { /* fall through */ }
+  }
+  var value = produce();
+  try {
+    cache.put(key, JSON.stringify(value), ttlSec || RESULT_TTL_SEC);
+  } catch (e) { /* too large to cache */ }
+  return value;
+}
+
 var sheetCache_ = {};
 
 function getSheet_(name) {
@@ -213,6 +254,7 @@ function getConfig_(key, fallback) {
 
 function setConfig_(key, value) {
   configCache_ = null;
+  bumpDataVersion_();
   var sheet = getSheet_(SHEET_NAMES.Config);
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -234,8 +276,10 @@ function setConfig_(key, value) {
  */
 var tableCache_ = {};
 
+/** Every write path must call this, or cached reads will go stale. */
 function invalidateTable_(sheetName) {
   delete tableCache_[sheetName];
+  bumpDataVersion_();
 }
 
 function readAllObjects_(sheetName) {

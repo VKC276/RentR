@@ -74,14 +74,66 @@
     });
   }
 
-  global.Status = { show: show, update: update, hide: hide, fail: fail, during: during };
+  var busyButtons = new Map();
+
+  /**
+   * Puts the progress text inside the button that was pressed, which is where
+   * the eye already is. Falls back to the banner when there is no button.
+   */
+  function button(el, text, promise) {
+    if (!el) return during(text, promise);
+
+    var original = el.innerHTML;
+    var wasDisabled = el.disabled;
+    el.disabled = true;
+    el.classList.add('is-busy');
+    el.innerHTML = '<span class="status-spinner"></span><span></span>';
+    el.lastChild.textContent = text;
+    // Keep the widest state so the layout does not jump back and forth.
+    el.style.minWidth = Math.ceil(el.getBoundingClientRect().width) + 'px';
+
+    var restore = function () {
+      el.innerHTML = original;
+      el.disabled = wasDisabled;
+      el.classList.remove('is-busy');
+      el.style.minWidth = '';
+      busyButtons.delete(el);
+    };
+    busyButtons.set(el, restore);
+
+    return promise.then(function (res) {
+      restore();
+      return res;
+    }, function (err) {
+      restore();
+      throw err;
+    });
+  }
+
+  /** Retries update the label of whichever button is currently working. */
+  function updateBusyButtons(text) {
+    busyButtons.forEach(function (_restore, el) {
+      if (el.lastChild) el.lastChild.textContent = text;
+    });
+  }
+
+  global.Status = {
+    show: show,
+    update: update,
+    hide: hide,
+    fail: fail,
+    during: during,
+    button: button
+  };
 
   // Runs after all synchronous scripts, so Api and I18n are available whatever
   // order the page loads them in.
   function attachRetryNotice() {
     if (!global.Api) return;
     global.Api.onRetry = function () {
-      update(global.I18n ? global.I18n.t('busyRetry') : 'Försöker igen…');
+      var text = global.I18n ? global.I18n.t('busyRetry') : 'Försöker igen…';
+      update(text);
+      updateBusyButtons(text);
     };
   }
 

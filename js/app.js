@@ -90,7 +90,7 @@
    */
   function ensureConfig() {
     if (state.config) return Promise.resolve(state.config);
-    return Status.during(I18n.t('busyConfig'), Api.loadPublicConfig()).then(function (cfg) {
+    return Api.loadPublicConfig().then(function (cfg) {
       state.config = cfg;
       $('brand').textContent = cfg.appName || I18n.t('appName');
       return cfg;
@@ -142,20 +142,16 @@
     }
     state.startDate = s;
     state.endDate = e;
-    $('btnCheck').disabled = true;
-    ensureConfig().then(function () {
-      return Status.during(
-        I18n.t('busyAvailability'),
-        Api.call('getAvailability', { startDate: s, endDate: e })
-      );
-    }).then(function (res) {
-      $('btnCheck').disabled = false;
+    var work = ensureConfig().then(function () {
+      return Api.call('getAvailability', { startDate: s, endDate: e });
+    });
+
+    Status.button($('btnCheck'), I18n.t('busyAvailability'), work).then(function (res) {
       $('stepPads').hidden = false;
       $('stepForm').hidden = true;
       renderPads(res.pads || []);
       updatePriceBox();
     }).catch(function (err) {
-      $('btnCheck').disabled = false;
       showErr('errDates', err.message || I18n.t('error'));
     });
   });
@@ -163,38 +159,39 @@
   $('btnHold').addEventListener('click', function () {
     showErr('errPads');
     if (!state.selected.length) return;
-    $('btnHold').disabled = true;
     // An earlier hold of ours would otherwise block the pads we are re-picking.
     var prev = state.hold;
     state.hold = null;
-    var released = prev
-      ? Status.during(I18n.t('busyRelease'), Api.call('releaseHold', { holdToken: prev.holdToken })).catch(function () {})
-      : Promise.resolve();
-
-    released.then(function () {
-      return Status.during(I18n.t('busyHold'), Api.call('createHold', {
+    var work = (prev
+      ? Api.call('releaseHold', { holdToken: prev.holdToken }).catch(function () {})
+      : Promise.resolve()
+    ).then(function () {
+      return Api.call('createHold', {
         padIds: state.selected,
         startDate: state.startDate,
         endDate: state.endDate
-      }));
-    }).then(function (hold) {
+      });
+    });
+
+    Status.button($('btnHold'), I18n.t('busyHold'), work).then(function (hold) {
       state.hold = hold;
       $('stepForm').hidden = false;
       $('btnSubmit').disabled = false;
       startTimer(hold.expiresAt);
       updatePriceBox();
-      $('btnHold').disabled = false;
       window.scrollTo({ top: $('stepForm').offsetTop - 20, behavior: 'smooth' });
     }).catch(function (err) {
-      $('btnHold').disabled = false;
       showErr('errPads', err.message || I18n.t('error'));
     });
   });
 
   $('btnCancelHold').addEventListener('click', function () {
     if (state.hold) {
-      Status.during(I18n.t('busyRelease'), Api.call('releaseHold', { holdToken: state.hold.holdToken }))
-        .catch(function () {});
+      Status.button(
+        $('btnCancelHold'),
+        I18n.t('busyRelease'),
+        Api.call('releaseHold', { holdToken: state.hold.holdToken })
+      ).catch(function () {});
     }
     state.hold = null;
     $('stepForm').hidden = true;
@@ -217,8 +214,7 @@
       showErr('errForm', I18n.t('error'));
       return;
     }
-    $('btnSubmit').disabled = true;
-    Status.during(I18n.t('busySubmit'), Api.call('submitBooking', payload)).then(function (res) {
+    Status.button($('btnSubmit'), I18n.t('busySubmit'), Api.call('submitBooking', payload)).then(function (res) {
       if (state.timerId) clearInterval(state.timerId);
       $('stepDates').hidden = true;
       $('stepPads').hidden = true;
@@ -229,12 +225,11 @@
       $('manageLink').href = res.manageUrl || ('booking.html?t=' + encodeURIComponent(res.magicToken));
       $('manageLink').textContent = I18n.t('manage');
     }).catch(function (err) {
-      $('btnSubmit').disabled = false;
       showErr('errForm', err.message || I18n.t('error'));
     });
   });
 
-  ensureConfig().then(function () {
+  Status.during(I18n.t('busyConfig'), ensureConfig()).then(function () {
     applyI18n();
   }).catch(function (err) {
     applyI18n();

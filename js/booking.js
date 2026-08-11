@@ -42,37 +42,32 @@
     var btnDoor = $('btnDoor');
     if (btnDoor) {
       btnDoor.onclick = function () {
-        btnDoor.disabled = true;
-        Status.during(I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token })).then(function (res) {
-          booking = res.booking;
-          render();
-        }).catch(function (e) {
-          btnDoor.disabled = false;
-          showErr(e.message);
-        });
+        Status.button(btnDoor, I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token }))
+          .then(function (res) {
+            booking = res.booking;
+            render();
+          }).catch(function (e) { showErr(e.message); });
       };
     }
     var btnConfirm = $('btnConfirm');
     if (btnConfirm) {
       btnConfirm.onclick = function () {
-        btnConfirm.disabled = true;
-        Status.during(I18n.t('busyReturn'), Api.call('confirmReturn', { magicToken: token, t: token })).then(function (res) {
-          booking = res.booking;
-          render();
-        }).catch(function (e) {
-          btnConfirm.disabled = false;
-          showErr(e.message);
-        });
+        Status.button(btnConfirm, I18n.t('busyReturn'), Api.call('confirmReturn', { magicToken: token, t: token }))
+          .then(function (res) {
+            booking = res.booking;
+            render();
+          }).catch(function (e) { showErr(e.message); });
       };
     }
     var btnCancel = $('btnCancel');
     if (btnCancel) {
       btnCancel.onclick = function () {
         if (!confirm(I18n.t('requestCancel') + '?')) return;
-        Status.during(I18n.t('busyCancel'), Api.call('guestRequestCancel', { magicToken: token, t: token })).then(function (res) {
-          booking = res.booking;
-          render();
-        }).catch(function (e) { showErr(e.message); });
+        Status.button(btnCancel, I18n.t('busyCancel'), Api.call('guestRequestCancel', { magicToken: token, t: token }))
+          .then(function (res) {
+            booking = res.booking;
+            render();
+          }).catch(function (e) { showErr(e.message); });
       };
     }
   }

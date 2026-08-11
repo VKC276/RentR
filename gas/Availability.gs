@@ -3,8 +3,14 @@
  */
 
 function getAvailability_(startDate, endDate) {
-  expireHolds_();
-  calcDays_(startDate, endDate);
+  calcDays_(startDate, endDate); // validate before caching on the key
+  // Short TTL: a hold lapsing frees a pad without any write to invalidate on.
+  return cachedResult_('avail_' + startDate + '_' + endDate, function () {
+    return computeAvailability_(startDate, endDate);
+  }, 30);
+}
+
+function computeAvailability_(startDate, endDate) {
   var pads = readAllObjects_(SHEET_NAMES.Pads).filter(function (p) {
     return p.active === true || p.active === 'true';
   }).sort(function (a, b) {
@@ -47,6 +53,10 @@ function getAvailability_(startDate, endDate) {
 }
 
 function getPublicConfig_() {
+  return cachedResult_('publicConfig', computePublicConfig_);
+}
+
+function computePublicConfig_() {
   var pads = readAllObjects_(SHEET_NAMES.Pads)
     .filter(function (p) { return p.active === true || p.active === 'true'; })
     .sort(function (a, b) { return Number(a.sortOrder) - Number(b.sortOrder); })

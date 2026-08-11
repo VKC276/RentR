@@ -25,8 +25,10 @@
     revokeDoorPass: 'Spärrar dörrlänk…'
   };
 
-  function api(action, payload) {
-    return Status.during(BUSY[action] || 'Arbetar…', Api.call(action, payload || {}, session));
+  function api(action, payload, btn) {
+    var label = BUSY[action] || 'Arbetar…';
+    var call = Api.call(action, payload || {}, session);
+    return btn ? Status.button(btn, label, call) : Status.during(label, call);
   }
 
   function showLogin(show) {
@@ -48,7 +50,7 @@
     api('login', {
       email: $('email').value.trim(),
       password: $('password').value
-    }).then(function (res) {
+    }, $('btnLogin')).then(function (res) {
       session = res.session.token;
       localStorage.setItem('adminSession', session);
       showLogin(false);

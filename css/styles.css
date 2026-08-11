@@ -144,8 +144,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .status-bar {
   position: fixed;
   left: 50%;
-  bottom: 1.25rem;
-  transform: translate(-50%, 1rem);
+  top: 1rem;
+  transform: translate(-50%, -0.75rem);
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -177,6 +177,22 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   animation: status-spin 0.7s linear infinite;
 }
 @keyframes status-spin { to { transform: rotate(360deg); } }
+button.is-busy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: progress;
+  opacity: 1;
+}
+button.is-busy .status-spinner {
+  border-color: rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+}
+button.ghost.is-busy .status-spinner {
+  border-color: rgba(26, 43, 51, 0.25);
+  border-top-color: var(--ink);
+}
 @media (prefers-reduced-motion: reduce) {
   .status-spinner { animation-duration: 2s; }
   .status-bar { transition: none; }

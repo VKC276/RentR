@@ -76,7 +76,6 @@ function findHoldByToken_(token) {
 }
 
 function requireActiveHold_(holdToken) {
-  expireHolds_();
   var hold = findHoldByToken_(holdToken);
   if (!hold || hold.status !== 'active') throw softError_('Hold ogiltig eller utgången', 400);
   if (new Date(hold.expiresAt).getTime() < Date.now()) {
@@ -86,8 +85,12 @@ function requireActiveHold_(holdToken) {
   return hold;
 }
 
+/**
+ * Expiry is decided from expiresAt, so this needs no sheet write. Marking rows
+ * expired here made every availability check a write request; expireHolds_ now
+ * only runs on write paths, purely to keep the tab tidy.
+ */
 function getActiveHolds_() {
-  expireHolds_();
   return readAllObjects_(SHEET_NAMES.Holds).filter(function (h) {
     return h.status === 'active' && new Date(h.expiresAt).getTime() >= Date.now();
   });

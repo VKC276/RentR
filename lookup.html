@@ -42,7 +42,7 @@
     document.getElementById('btn').onclick = function () {
       var err = document.getElementById('err');
       err.hidden = true;
-      Status.during(I18n.t('busyLookup'), Api.call('lookupBooking', {
+      Status.button(this, I18n.t('busyLookup'), Api.call('lookupBooking', {
         bookingNumber: document.getElementById('bookingNumber').value.trim(),
         email: document.getElementById('email').value.trim()
       })).then(function (res) {
