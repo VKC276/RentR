@@ -38,9 +38,12 @@
       if (/accounts\.google\.com|ServiceLogin/i.test(text)) {
         throw new Error('Web appen kräver inloggning. Deploya om med "Vem har åtkomst: Alla".');
       }
-      // Apps Script error pages are HTML; surface the text so the real cause is visible.
+      // Google sometimes serves a Drive error page instead of the script output.
+      // The script itself already ran, so this is safe to retry thanks to requestId.
       var snippet = String(text).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 250);
-      throw new Error('Oväntat svar från servern: ' + (snippet || '(tomt svar)'));
+      var err = new Error('Oväntat svar från servern: ' + (snippet || '(tomt svar)'));
+      err.retryable = true;
+      throw err;
     }
     if (data && data.error) {
       var err = new Error(data.error);
@@ -149,6 +152,31 @@
 
   var SENDERS = { post: sendPost, get: sendGet, jsonp: sendJsonp };
 
+  var RETRIES = 4;
+
+  function newRequestId() {
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  function delay(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
+
+  /**
+   * Repeats the request on Google's transient error page. The body carries a
+   * stable requestId, so the backend replays its stored result instead of
+   * running the action twice.
+   */
+  function sendRetrying(name, body, left) {
+    if (typeof left !== 'number') left = RETRIES;
+    return SENDERS[name](body).catch(function (e) {
+      if (!e || !e.retryable || left <= 1) throw e;
+      return delay(700).then(function () {
+        return sendRetrying(name, body, left - 1);
+      });
+    });
+  }
+
   /**
    * Tries each transport with a ping until one answers, then remembers it.
    */
@@ -165,11 +193,11 @@
         ));
       }
       var name = order[i];
-      return SENDERS[name]({ action: 'ping' }).then(function () {
+      return SENDERS[name]({ action: 'ping', requestId: newRequestId() }).then(function () {
         transport = name;
         return name;
       }).catch(function (e) {
-        if (e && e.fromServer) {
+        if (e && (e.fromServer || e.retryable)) {
           // Reached the backend; the transport itself is fine.
           transport = name;
           return name;
@@ -189,30 +217,30 @@
   }
 
   function call(action, payload, sessionToken) {
-    var body = Object.assign({}, payload || {}, { action: action });
+    var body = Object.assign({}, payload || {}, { action: action, requestId: newRequestId() });
     if (sessionToken) body.sessionToken = sessionToken;
 
-    if (transport) return SENDERS[transport](body);
+    if (transport) return sendRetrying(transport, body);
 
     // A read can double as the probe; anything that writes waits for a ping
     // so a failed request is never replayed on a second transport.
     if (READ_ACTIONS[action]) {
-      return sendPost(body).then(function (res) {
+      return sendRetrying('post', body).then(function (res) {
         transport = 'post';
         return res;
       }).catch(function (e) {
-        if (e && e.fromServer) {
+        if (e && (e.fromServer || e.retryable)) {
           transport = 'post';
           throw e;
         }
         return detectTransport().then(function (name) {
-          return SENDERS[name](body);
+          return sendRetrying(name, body);
         });
       });
     }
 
     return detectTransport().then(function (name) {
-      return SENDERS[name](body);
+      return sendRetrying(name, body);
     });
   }
 

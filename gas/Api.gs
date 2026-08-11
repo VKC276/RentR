@@ -19,12 +19,40 @@ function handleApi_(e) {
     // Prefer Authorization-like fields from body
     if (body.sessionToken) sessionToken = body.sessionToken;
 
-    var result = route_(action, body, sessionToken, e);
+    var result = routeIdempotent_(action, body, sessionToken, e);
     return jsonResponse_(result);
   } catch (err) {
     var status = err.status || 500;
     return jsonResponse_({ error: err.message || String(err), status: status }, status);
   }
+}
+
+/**
+ * script.googleusercontent.com intermittently serves a Drive error page instead
+ * of the script output. The script has already run at that point, so the client
+ * retries with the same requestId and gets the stored response back rather than
+ * creating a second hold or booking.
+ *
+ * Only successful results are stored; a thrown error re-runs on retry.
+ */
+function routeIdempotent_(action, body, sessionToken, e) {
+  var key = body && body.requestId ? String(body.requestId).slice(0, 64) : '';
+  if (!key) return route_(action, body, sessionToken, e);
+
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'idem_' + key;
+  var hit = cache.get(cacheKey);
+  if (hit) {
+    try { return JSON.parse(hit); } catch (err) { /* fall through and re-run */ }
+  }
+
+  var result = route_(action, body, sessionToken, e);
+  try {
+    cache.put(cacheKey, JSON.stringify(result), 600);
+  } catch (err) {
+    // Result too large to cache; a retry would re-run, which is acceptable.
+  }
+  return result;
 }
 
 function route_(action, body, sessionToken, e) {

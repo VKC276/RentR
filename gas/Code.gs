@@ -23,7 +23,7 @@ function doGet(e) {
     if (e.parameter.t) body.magicToken = e.parameter.t;
     if (body.action) action = body.action;
     var sessionToken = e.parameter.sessionToken || body.sessionToken || '';
-    var result = route_(action, body, sessionToken, e);
+    var result = routeIdempotent_(action, body, sessionToken, e);
     if (e.parameter.callback) {
       return ContentService
         .createTextOutput(e.parameter.callback + '(' + JSON.stringify(result) + ')')
