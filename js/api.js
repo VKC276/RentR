@@ -6,21 +6,14 @@
  * are kept "simple" (text/plain body, no custom headers) so the browser never
  * sends a preflight, which GAS cannot answer.
  *
- * GET and JSONP exist as fallbacks for networks that strip POST or CORS.
- * The working transport is detected once and reused, so a request is never
- * replayed on another transport after it may already have reached the server.
+ * GET and JSONP exist as fallbacks for networks that strip POST or CORS. Every
+ * request carries a requestId that the backend uses to replay a stored result,
+ * so falling back or retrying can never run an action twice.
  */
 (function (global) {
   var TIMEOUT_MS = 30000;
   var seq = 0;
   var transport = null;
-  var detecting = null;
-
-  var READ_ACTIONS = {
-    ping: 1, getPublicConfig: 1, getAvailability: 1, lookupBooking: 1,
-    getBookingByToken: 1, getDoorPass: 1, me: 1, listBookings: 1, listUsers: 1,
-    listPads: 1, listPricingRules: 1, listDoorPasses: 1, availablePadsForBooking: 1
-  };
 
   function apiBase() {
     var cfg = global.APP_CONFIG || {};
@@ -181,42 +174,28 @@
   }
 
   /**
-   * Tries each transport with a ping until one answers, then remembers it.
+   * Walks the transports until one answers. requestId makes a replay harmless,
+   * so this needs no separate probe request — the real call is the probe.
    */
-  function detectTransport() {
-    if (transport) return Promise.resolve(transport);
-    if (detecting) return detecting;
-
-    var order = ['post', 'get', 'jsonp'];
-    var attempt = function (i, lastErr) {
-      if (i >= order.length) {
-        return Promise.reject(new Error(
-          'Kan inte nå API:et. Kontrollera API_BASE_URL och att web appen är deployad för "Alla". (' +
-          (lastErr && lastErr.message ? lastErr.message : 'okänt fel') + ')'
-        ));
-      }
-      var name = order[i];
-      return SENDERS[name]({ action: 'ping', requestId: newRequestId() }).then(function () {
+  function attemptTransports(order, i, body, lastErr) {
+    if (i >= order.length) {
+      return Promise.reject(new Error(
+        'Kan inte nå API:et. Kontrollera API_BASE_URL och att web appen är deployad för "Alla". (' +
+        (lastErr && lastErr.message ? lastErr.message : 'okänt fel') + ')'
+      ));
+    }
+    var name = order[i];
+    return sendRetrying(name, body).then(function (res) {
+      transport = name;
+      return res;
+    }).catch(function (e) {
+      // A rejection from our own backend means the transport works fine.
+      if (e && e.fromServer) {
         transport = name;
-        return name;
-      }).catch(function (e) {
-        if (e && (e.fromServer || e.retryable)) {
-          // Reached the backend; the transport itself is fine.
-          transport = name;
-          return name;
-        }
-        return attempt(i + 1, e);
-      });
-    };
-
-    detecting = attempt(0, null).then(function (name) {
-      detecting = null;
-      return name;
-    }, function (e) {
-      detecting = null;
-      throw e;
+        throw e;
+      }
+      return attemptTransports(order, i + 1, body, e);
     });
-    return detecting;
   }
 
   function call(action, payload, sessionToken) {
@@ -224,27 +203,7 @@
     if (sessionToken) body.sessionToken = sessionToken;
 
     if (transport) return sendRetrying(transport, body);
-
-    // A read can double as the probe; anything that writes waits for a ping
-    // so a failed request is never replayed on a second transport.
-    if (READ_ACTIONS[action]) {
-      return sendRetrying('post', body).then(function (res) {
-        transport = 'post';
-        return res;
-      }).catch(function (e) {
-        if (e && (e.fromServer || e.retryable)) {
-          transport = 'post';
-          throw e;
-        }
-        return detectTransport().then(function (name) {
-          return sendRetrying(name, body);
-        });
-      });
-    }
-
-    return detectTransport().then(function (name) {
-      return sendRetrying(name, body);
-    });
+    return attemptTransports(['post', 'get', 'jsonp'], 0, body);
   }
 
   function getCachedConfig() {
@@ -274,6 +233,7 @@
     call: call,
     loadPublicConfig: loadPublicConfig,
     getCachedConfig: getCachedConfig,
+    cacheConfig: setCachedConfig,
     onRetry: null
   };
 

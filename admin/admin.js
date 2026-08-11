@@ -9,6 +9,7 @@
     login: 'Loggar in…',
     logout: 'Loggar ut…',
     me: 'Kontrollerar inloggning…',
+    adminOverview: 'Hämtar bokningar…',
     listBookings: 'Hämtar bokningar…',
     adminUpdateBooking: 'Sparar bokningen…',
     availablePadsForBooking: 'Kontrollerar lediga crashpads…',
@@ -69,39 +70,56 @@
     showLogin(true);
   };
 
+  /**
+   * One request for the whole page. Five separate calls cost five redirect
+   * round trips, which dwarfs the time Apps Script spends producing the data.
+   */
   function refreshAll() {
-    loadBookings();
-    loadPricing();
-    loadUsers();
-    loadDoorPasses();
-  }
-
-  function loadBookings() {
-    api('listBookings', {
+    return api('adminOverview', {
       bookingNumber: $('searchNo').value.trim(),
       status: $('filterStatus').value
     }).then(function (res) {
-      bookings = res.bookings || [];
-      var tb = $('bookingsTable').querySelector('tbody');
-      tb.innerHTML = '';
-      bookings.forEach(function (b) {
-        var tr = document.createElement('tr');
-        tr.innerHTML =
-          '<td>' + b.bookingNumber + '</td>' +
-          '<td>' + escapeHtml(b.firstName + ' ' + b.lastName) + '<div class="muted">' + escapeHtml(b.email) + '</div></td>' +
-          '<td>' + b.startDate + ' – ' + b.endDate + '<div class="muted">' + b.days + ' dygn</div></td>' +
-          '<td>' + b.status + '</td>' +
-          '<td>' + b.priceTotal + ' SEK</td>' +
-          '<td><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' + (b.paid ? 'Betald' : 'Obetald') + '</span></td>' +
-          '<td><button type="button" class="secondary" data-id="' + b.id + '">Öppna</button></td>';
-        tb.appendChild(tr);
-      });
-      tb.querySelectorAll('button[data-id]').forEach(function (btn) {
-        btn.onclick = function () { openDetail(btn.getAttribute('data-id')); };
-      });
+      renderBookings(res.bookings || []);
+      renderPads(res.pads || []);
+      renderRules(res.rules || []);
+      renderUsers(res.users || []);
+      renderPasses(res.passes || []);
     }).catch(function (e) {
       if (e.status === 401) showLogin(true);
       else alert(e.message);
+    });
+  }
+
+  function loadBookings() {
+    return api('listBookings', {
+      bookingNumber: $('searchNo').value.trim(),
+      status: $('filterStatus').value
+    }).then(function (res) {
+      renderBookings(res.bookings || []);
+    }).catch(function (e) {
+      if (e.status === 401) showLogin(true);
+      else alert(e.message);
+    });
+  }
+
+  function renderBookings(list) {
+    bookings = list;
+    var tb = $('bookingsTable').querySelector('tbody');
+    tb.innerHTML = '';
+    bookings.forEach(function (b) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + b.bookingNumber + '</td>' +
+        '<td>' + escapeHtml(b.firstName + ' ' + b.lastName) + '<div class="muted">' + escapeHtml(b.email) + '</div></td>' +
+        '<td>' + b.startDate + ' – ' + b.endDate + '<div class="muted">' + b.days + ' dygn</div></td>' +
+        '<td>' + b.status + '</td>' +
+        '<td>' + b.priceTotal + ' SEK</td>' +
+        '<td><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' + (b.paid ? 'Betald' : 'Obetald') + '</span></td>' +
+        '<td><button type="button" class="secondary" data-id="' + b.id + '">Öppna</button></td>';
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('button[data-id]').forEach(function (btn) {
+      btn.onclick = function () { openDetail(btn.getAttribute('data-id')); };
     });
   }
 
@@ -145,8 +163,9 @@
     function act(action, extra) {
       var payload = Object.assign({ action: action, bookingId: b.id }, extra || {});
       api('adminUpdateBooking', payload).then(function () {
-        loadBookings();
-        setTimeout(function () { openDetail(b.id); }, 400);
+        return loadBookings();
+      }).then(function () {
+        openDetail(b.id);
       }).catch(function (e) {
         $('detailErr').hidden = false;
         $('detailErr').textContent = e.message;
@@ -193,38 +212,36 @@
     }
   }
 
-  function loadPricing() {
-    api('listPads', {}).then(function (res) {
-      var html = '<table class="table"><thead><tr><th>Namn</th><th>Pris/dygn</th><th></th></tr></thead><tbody>';
-      (res.pads || []).forEach(function (p) {
-        html += '<tr><td>' + escapeHtml(p.name) + '</td><td><input data-pad="' + p.id + '" type="number" value="' + p.pricePerDay + '" style="max-width:120px" /></td>' +
-          '<td><button type="button" class="secondary" data-save-pad="' + p.id + '">Spara</button></td></tr>';
-      });
-      html += '</tbody></table>';
-      $('padsList').innerHTML = html;
-      $('padsList').querySelectorAll('[data-save-pad]').forEach(function (btn) {
-        btn.onclick = function () {
-          var id = btn.getAttribute('data-save-pad');
-          var input = $('padsList').querySelector('[data-pad="' + id + '"]');
-          api('updatePad', { padId: id, pricePerDay: Number(input.value) }).then(loadPricing);
-        };
-      });
-    }).catch(function () {});
+  function renderPads(pads) {
+    var html = '<table class="table"><thead><tr><th>Namn</th><th>Pris/dygn</th><th></th></tr></thead><tbody>';
+    pads.forEach(function (p) {
+      html += '<tr><td>' + escapeHtml(p.name) + '</td><td><input data-pad="' + p.id + '" type="number" value="' + p.pricePerDay + '" style="max-width:120px" /></td>' +
+        '<td><button type="button" class="secondary" data-save-pad="' + p.id + '">Spara</button></td></tr>';
+    });
+    html += '</tbody></table>';
+    $('padsList').innerHTML = html;
+    $('padsList').querySelectorAll('[data-save-pad]').forEach(function (btn) {
+      btn.onclick = function () {
+        var id = btn.getAttribute('data-save-pad');
+        var input = $('padsList').querySelector('[data-pad="' + id + '"]');
+        api('updatePad', { padId: id, pricePerDay: Number(input.value) }, btn).then(refreshAll);
+      };
+    });
+  }
 
-    api('listPricingRules', {}).then(function (res) {
-      var html = '<table class="table"><thead><tr><th>Dim</th><th>Min</th><th>%</th><th>Label</th><th></th></tr></thead><tbody>';
-      (res.rules || []).forEach(function (r) {
-        html += '<tr><td>' + r.dimension + '</td><td>' + r.minValue + '</td><td>' + r.percentOff + '</td><td>' + escapeHtml(r.label) +
-          '</td><td><button type="button" class="ghost" data-del-rule="' + r.id + '">Ta bort</button></td></tr>';
-      });
-      html += '</tbody></table>';
-      $('rulesList').innerHTML = html;
-      $('rulesList').querySelectorAll('[data-del-rule]').forEach(function (btn) {
-        btn.onclick = function () {
-          api('deletePricingRule', { id: btn.getAttribute('data-del-rule') }).then(loadPricing);
-        };
-      });
-    }).catch(function () {});
+  function renderRules(rules) {
+    var html = '<table class="table"><thead><tr><th>Dim</th><th>Min</th><th>%</th><th>Label</th><th></th></tr></thead><tbody>';
+    rules.forEach(function (r) {
+      html += '<tr><td>' + r.dimension + '</td><td>' + r.minValue + '</td><td>' + r.percentOff + '</td><td>' + escapeHtml(r.label) +
+        '</td><td><button type="button" class="ghost" data-del-rule="' + r.id + '">Ta bort</button></td></tr>';
+    });
+    html += '</tbody></table>';
+    $('rulesList').innerHTML = html;
+    $('rulesList').querySelectorAll('[data-del-rule]').forEach(function (btn) {
+      btn.onclick = function () {
+        api('deletePricingRule', { id: btn.getAttribute('data-del-rule') }, btn).then(refreshAll);
+      };
+    });
   }
 
   $('btnAddRule').onclick = function () {
@@ -234,28 +251,26 @@
       percentOff: Number($('rulePct').value),
       label: $('ruleLabel').value,
       active: true
-    }).then(loadPricing);
+    }, $('btnAddRule')).then(refreshAll);
   };
 
-  function loadUsers() {
-    api('listUsers', {}).then(function (res) {
-      var html = '<table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Aktiv</th><th></th></tr></thead><tbody>';
-      (res.users || []).forEach(function (u) {
-        html += '<tr><td>' + escapeHtml(u.firstName + ' ' + u.lastName) + '</td><td>' + escapeHtml(u.email) + '</td><td>' + (u.active ? 'Ja' : 'Nej') +
-          '</td><td><button type="button" class="ghost" data-del-user="' + u.id + '">Radera</button></td></tr>';
-      });
-      html += '</tbody></table>';
-      $('usersList').innerHTML = html;
-      $('usersList').querySelectorAll('[data-del-user]').forEach(function (btn) {
-        btn.onclick = function () {
-          if (!confirm('Radera användare?')) return;
-          api('deleteUser', { userId: btn.getAttribute('data-del-user') }).then(loadUsers).catch(function (e) {
-            $('userErr').hidden = false;
-            $('userErr').textContent = e.message;
-          });
-        };
-      });
-    }).catch(function () {});
+  function renderUsers(users) {
+    var html = '<table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Aktiv</th><th></th></tr></thead><tbody>';
+    users.forEach(function (u) {
+      html += '<tr><td>' + escapeHtml(u.firstName + ' ' + u.lastName) + '</td><td>' + escapeHtml(u.email) + '</td><td>' + (u.active ? 'Ja' : 'Nej') +
+        '</td><td><button type="button" class="ghost" data-del-user="' + u.id + '">Radera</button></td></tr>';
+    });
+    html += '</tbody></table>';
+    $('usersList').innerHTML = html;
+    $('usersList').querySelectorAll('[data-del-user]').forEach(function (btn) {
+      btn.onclick = function () {
+        if (!confirm('Radera användare?')) return;
+        api('deleteUser', { userId: btn.getAttribute('data-del-user') }, btn).then(refreshAll).catch(function (e) {
+          $('userErr').hidden = false;
+          $('userErr').textContent = e.message;
+        });
+      };
+    });
   }
 
   $('btnCreateUser').onclick = function () {
@@ -265,33 +280,31 @@
       lastName: $('uLast').value.trim(),
       email: $('uEmail').value.trim(),
       password: $('uPass').value
-    }).then(function () {
+    }, $('btnCreateUser')).then(function () {
       $('uFirst').value = $('uLast').value = $('uEmail').value = $('uPass').value = '';
-      loadUsers();
+      return refreshAll();
     }).catch(function (e) {
       $('userErr').hidden = false;
       $('userErr').textContent = e.message;
     });
   };
 
-  function loadDoorPasses() {
-    api('listDoorPasses', {}).then(function (res) {
-      var html = '<table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Giltig</th><th>Status</th><th></th></tr></thead><tbody>';
-      (res.passes || []).forEach(function (p) {
-        html += '<tr><td>' + escapeHtml(p.recipientName) + '</td><td>' + escapeHtml(p.recipientEmail) + '</td>' +
-          '<td>' + p.startDate + ' – ' + p.endDate + '</td>' +
-          '<td>' + (p.revoked ? 'Återkallad' : (p.validToday ? 'Gäller idag' : 'Utanför period')) + '</td>' +
-          '<td>' + (p.revoked ? '' : '<button type="button" class="ghost" data-revoke-pass="' + p.id + '">Återkalla</button>') + '</td></tr>';
-      });
-      html += '</tbody></table>';
-      $('dpList').innerHTML = html;
-      $('dpList').querySelectorAll('[data-revoke-pass]').forEach(function (btn) {
-        btn.onclick = function () {
-          if (!confirm('Återkalla dörrlänk?')) return;
-          api('revokeDoorPass', { passId: btn.getAttribute('data-revoke-pass') }).then(loadDoorPasses);
-        };
-      });
-    }).catch(function () {});
+  function renderPasses(passes) {
+    var html = '<table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Giltig</th><th>Status</th><th></th></tr></thead><tbody>';
+    passes.forEach(function (p) {
+      html += '<tr><td>' + escapeHtml(p.recipientName) + '</td><td>' + escapeHtml(p.recipientEmail) + '</td>' +
+        '<td>' + p.startDate + ' – ' + p.endDate + '</td>' +
+        '<td>' + (p.revoked ? 'Återkallad' : (p.validToday ? 'Gäller idag' : 'Utanför period')) + '</td>' +
+        '<td>' + (p.revoked ? '' : '<button type="button" class="ghost" data-revoke-pass="' + p.id + '">Återkalla</button>') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    $('dpList').innerHTML = html;
+    $('dpList').querySelectorAll('[data-revoke-pass]').forEach(function (btn) {
+      btn.onclick = function () {
+        if (!confirm('Återkalla dörrlänk?')) return;
+        api('revokeDoorPass', { passId: btn.getAttribute('data-revoke-pass') }, btn).then(refreshAll);
+      };
+    });
   }
 
   $('btnSendDoorPass').onclick = function () {
@@ -303,11 +316,11 @@
       startDate: $('dpStart').value,
       endDate: $('dpEnd').value,
       locale: $('dpLocale').value
-    }).then(function (res) {
+    }, $('btnSendDoorPass')).then(function (res) {
       $('dpOk').hidden = false;
       $('dpOk').textContent = 'Mejl skickat till ' + res.sentTo;
       $('dpName').value = $('dpEmail').value = '';
-      loadDoorPasses();
+      return refreshAll();
     }).catch(function (e) {
       $('dpErr').hidden = false;
       $('dpErr').textContent = e.message;
@@ -325,14 +338,9 @@
   }
 
   if (session) {
-    api('me', {}).then(function () {
-      showLogin(false);
-      refreshAll();
-    }).catch(function () {
-      session = '';
-      localStorage.removeItem('adminSession');
-      showLogin(true);
-    });
+    // adminOverview already rejects an invalid session, so no separate 'me' call.
+    showLogin(false);
+    refreshAll();
   } else {
     showLogin(true);
   }

@@ -84,17 +84,25 @@
     });
   }
 
+  function useConfig(cfg) {
+    state.config = cfg;
+    $('brand').textContent = cfg.appName || I18n.t('appName');
+  }
+
   /**
-   * Pads and prices cannot be rendered without the config, so a failed initial
-   * load is retried here rather than leaving the page in a half-broken state.
+   * Config and availability arrive together, because a second round trip to
+   * Apps Script costs seconds even when the script itself runs in under one.
    */
-  function ensureConfig() {
-    if (state.config) return Promise.resolve(state.config);
-    return Api.loadPublicConfig().then(function (cfg) {
-      state.config = cfg;
-      $('brand').textContent = cfg.appName || I18n.t('appName');
-      return cfg;
-    });
+  function loadAvailability(startDate, endDate) {
+    if (state.config) {
+      return Api.call('getAvailability', { startDate: startDate, endDate: endDate });
+    }
+    return Api.call('getBookingPage', { startDate: startDate, endDate: endDate })
+      .then(function (res) {
+        useConfig(res.config);
+        Api.cacheConfig(res.config);
+        return res.availability;
+      });
   }
 
   function updatePriceBox() {
@@ -142,11 +150,7 @@
     }
     state.startDate = s;
     state.endDate = e;
-    var work = ensureConfig().then(function () {
-      return Api.call('getAvailability', { startDate: s, endDate: e });
-    });
-
-    Status.button($('btnCheck'), I18n.t('busyAvailability'), work).then(function (res) {
+    Status.button($('btnCheck'), I18n.t('busyAvailability'), loadAvailability(s, e)).then(function (res) {
       $('stepPads').hidden = false;
       $('stepForm').hidden = true;
       renderPads(res.pads || []);
@@ -229,10 +233,9 @@
     });
   });
 
-  Status.during(I18n.t('busyConfig'), ensureConfig()).then(function () {
-    applyI18n();
-  }).catch(function (err) {
-    applyI18n();
-    showErr('errDates', err.message || I18n.t('error'));
-  });
+  // No request on load: the page renders immediately and the first availability
+  // check brings the config along with it.
+  var cached = Api.getCachedConfig();
+  if (cached) useConfig(cached);
+  applyI18n();
 })();

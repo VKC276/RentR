@@ -67,6 +67,13 @@ function route_(action, body, sessionToken, e) {
       return getPublicConfig_();
     case 'getAvailability':
       return getAvailability_(body.startDate || e.parameter.startDate, body.endDate || e.parameter.endDate);
+    // Each round trip costs far more in Google's redirect hop than the script
+    // itself takes to run, so the pages fetch everything they need at once.
+    case 'getBookingPage':
+      return {
+        config: getPublicConfig_(),
+        availability: getAvailability_(body.startDate, body.endDate)
+      };
     case 'createHold':
       return createHold_(body.padIds, body.startDate, body.endDate);
     case 'releaseHold':
@@ -106,6 +113,15 @@ function route_(action, body, sessionToken, e) {
     case 'listBookings':
       requireAdmin_(sessionToken);
       return { bookings: listBookingsAdmin_(body) };
+    case 'adminOverview':
+      requireAdmin_(sessionToken);
+      return {
+        bookings: listBookingsAdmin_(body),
+        pads: listPadsAdmin_(),
+        rules: listPricingRulesAdmin_(),
+        users: listUsers_(),
+        passes: listDoorPasses_()
+      };
     case 'adminUpdateBooking':
       return adminUpdateBooking_(body.bookingId, body, requireAdmin_(sessionToken));
     case 'availablePadsForBooking':
