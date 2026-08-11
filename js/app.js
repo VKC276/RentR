@@ -62,7 +62,7 @@
       var div = document.createElement('div');
       div.className = 'pad' + (p.available ? '' : ' unavailable');
       div.innerHTML = '<strong>' + escapeHtml(p.name) + '</strong><div class="muted">' +
-        (p.available ? (p.pricePerDay + ' ' + (state.config.currency || 'SEK') + '/dygn') : I18n.t('unavailable')) +
+        (p.available ? (p.pricePerDay + ' ' + ((state.config && state.config.currency) || 'SEK') + '/dygn') : I18n.t('unavailable')) +
         '</div>';
       if (p.available) {
         div.addEventListener('click', function () {
@@ -81,6 +81,19 @@
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  /**
+   * Pads and prices cannot be rendered without the config, so a failed initial
+   * load is retried here rather than leaving the page in a half-broken state.
+   */
+  function ensureConfig() {
+    if (state.config) return Promise.resolve(state.config);
+    return Api.loadPublicConfig().then(function (cfg) {
+      state.config = cfg;
+      $('brand').textContent = cfg.appName || I18n.t('appName');
+      return cfg;
     });
   }
 
@@ -130,7 +143,9 @@
     state.startDate = s;
     state.endDate = e;
     $('btnCheck').disabled = true;
-    Api.call('getAvailability', { startDate: s, endDate: e }).then(function (res) {
+    ensureConfig().then(function () {
+      return Api.call('getAvailability', { startDate: s, endDate: e });
+    }).then(function (res) {
       $('btnCheck').disabled = false;
       $('stepPads').hidden = false;
       $('stepForm').hidden = true;
@@ -215,9 +230,7 @@
     });
   });
 
-  Api.loadPublicConfig().then(function (cfg) {
-    state.config = cfg;
-    $('brand').textContent = cfg.appName || I18n.t('appName');
+  ensureConfig().then(function () {
     applyI18n();
   }).catch(function (err) {
     applyI18n();

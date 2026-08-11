@@ -18,6 +18,7 @@
   }
 
   function calculatePrice(config, padIds, startDate, endDate) {
+    config = config || {};
     var days = calcDays(startDate, endDate);
     var padMap = {};
     (config.pads || []).forEach(function (p) { padMap[p.id] = p; });
