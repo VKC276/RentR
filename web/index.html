@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crashpad booking</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand" id="brand">Crashpad</div>
+      <div class="row" style="flex:0; align-items:center;">
+        <nav class="nav">
+          <a href="lookup.html" id="navFind">Find</a>
+          <a href="admin/">Admin</a>
+        </nav>
+        <div id="lang"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="stepDates">
+      <h1 id="titleBook">Book</h1>
+      <div class="row">
+        <div>
+          <label id="lblStart">Start</label>
+          <input type="date" id="startDate" />
+        </div>
+        <div>
+          <label id="lblEnd">End</label>
+          <input type="date" id="endDate" />
+        </div>
+      </div>
+      <p class="muted" id="daysHint"></p>
+      <p style="margin-top:1rem;">
+        <button type="button" id="btnCheck">Check</button>
+      </p>
+      <p class="err" id="errDates" hidden></p>
+    </div>
+
+    <div class="panel" id="stepPads" hidden>
+      <h2 id="titlePads">Pads</h2>
+      <div class="pad-grid" id="padGrid"></div>
+      <p style="margin-top:1rem;">
+        <button type="button" id="btnHold" disabled>Continue</button>
+      </p>
+      <p class="err" id="errPads" hidden></p>
+    </div>
+
+    <div class="panel" id="stepForm" hidden>
+      <h2 id="titleForm">Details</h2>
+      <p><span id="holdLabel">Hold</span>: <span class="hold-timer" id="holdTimer">--:--</span></p>
+      <div class="row">
+        <div><label id="lblFirst">First</label><input id="firstName" required /></div>
+        <div><label id="lblLast">Last</label><input id="lastName" required /></div>
+      </div>
+      <div class="row">
+        <div><label id="lblEmail">Email</label><input id="email" type="email" required /></div>
+        <div><label id="lblPhone">Phone</label><input id="phone" required /></div>
+      </div>
+      <div>
+        <label id="lblNotes">Notes</label>
+        <textarea id="notes" rows="3"></textarea>
+      </div>
+      <div class="price-box" id="priceBox"></div>
+      <p class="muted" id="payNote"></p>
+      <p style="margin-top:1rem;">
+        <button type="button" class="ghost" id="btnCancelHold">Cancel</button>
+        <button type="button" id="btnSubmit">Submit</button>
+      </p>
+      <p class="err" id="errForm" hidden></p>
+    </div>
+
+    <div class="panel" id="stepThanks" hidden>
+      <h2 id="thanksTitle">Thanks</h2>
+      <p id="thanksText"></p>
+      <p><strong id="lblBookingNo">No</strong>: <span id="bookingNumber"></span></p>
+      <p><a id="manageLink" href="#">Manage</a></p>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/pricing.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

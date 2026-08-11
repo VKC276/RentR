@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Find booking</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand"><a href="index.html" id="brand">Crashpad</a></div>
+      <div id="lang"></div>
+    </div>
+    <div class="panel">
+      <h1 id="title">Find</h1>
+      <div class="row">
+        <div><label id="lblNo">No</label><input id="bookingNumber" placeholder="2026-00001" /></div>
+        <div><label id="lblEmail">Email</label><input id="email" type="email" /></div>
+      </div>
+      <p style="margin-top:1rem;"><button type="button" id="btn">Search</button></p>
+      <p class="err" id="err" hidden></p>
+      <div id="result" hidden></div>
+    </div>
+  </div>
+  <script src="js/config.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/api.js"></script>
+  <script>
+    function apply() {
+      I18n.renderLangSwitcher(document.getElementById('lang'));
+      document.getElementById('brand').textContent = I18n.t('appName');
+      document.getElementById('title').textContent = I18n.t('lookupTitle');
+      document.getElementById('lblNo').textContent = I18n.t('bookingNo');
+      document.getElementById('lblEmail').textContent = I18n.t('email');
+      document.getElementById('btn').textContent = I18n.t('lookupBtn');
+    }
+    window.onLocaleChange = apply;
+    apply();
+    document.getElementById('btn').onclick = function () {
+      var err = document.getElementById('err');
+      err.hidden = true;
+      Api.call('lookupBooking', {
+        bookingNumber: document.getElementById('bookingNumber').value.trim(),
+        email: document.getElementById('email').value.trim()
+      }).then(function (res) {
+        var b = res.booking;
+        var box = document.getElementById('result');
+        box.hidden = false;
+        box.innerHTML = '<p><strong>' + b.bookingNumber + '</strong> — ' + b.status + '</p>' +
+          '<p>' + b.startDate + ' – ' + b.endDate + ' (' + b.days + ')</p>' +
+          '<p><a href="' + (res.manageUrl || ('booking.html?t=' + encodeURIComponent(res.magicToken))) + '">' + I18n.t('manage') + '</a></p>';
+      }).catch(function (e) {
+        err.hidden = false;
+        err.textContent = e.message || I18n.t('error');
+      });
+    };
+  </script>
+</body>
+</html>

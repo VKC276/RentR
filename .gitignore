@@ -1,0 +1,10 @@
+node_modules/
+.clasp.json
+web/js/config.local.js
+.env
+.env.local
+script-properties.local.txt
+.venv/
+__pycache__/
+.DS_Store
+*.log
