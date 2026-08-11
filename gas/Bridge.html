@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>RentR API Bridge</title>
+</head>
+<body>
+<script>
+(function () {
+  var ALLOWED_ORIGINS = [
+    'http://ledinfo.vastervikclimbing.se',
+    'https://ledinfo.vastervikclimbing.se',
+    'https://vkc276.github.io',
+    'http://127.0.0.1',
+    'http://localhost'
+  ];
+
+  function originOk(origin) {
+    if (!origin) return false;
+    for (var i = 0; i < ALLOWED_ORIGINS.length; i++) {
+      if (origin === ALLOWED_ORIGINS[i] || origin.indexOf(ALLOWED_ORIGINS[i]) === 0) return true;
+    }
+    return false;
+  }
+
+  function reply(source, origin, msg) {
+    try { source.postMessage(msg, origin); } catch (e) {}
+  }
+
+  window.addEventListener('message', function (event) {
+    if (!originOk(event.origin)) return;
+    var data = event.data || {};
+    if (data.type === 'rentR-ping') {
+      reply(event.source, event.origin, { type: 'rentR-ready' });
+      return;
+    }
+    if (data.type !== 'rentR-call' || !data.id) return;
+
+    var action = data.action || '';
+    var payload = data.payload || {};
+    var sessionToken = data.sessionToken || '';
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        reply(event.source, event.origin, {
+          type: 'rentR-result',
+          id: data.id,
+          ok: true,
+          result: result
+        });
+      })
+      .withFailureHandler(function (err) {
+        reply(event.source, event.origin, {
+          type: 'rentR-result',
+          id: data.id,
+          ok: false,
+          error: (err && err.message) ? err.message : String(err)
+        });
+      })
+      .bridgeCall(action, payload, sessionToken);
+  });
+
+  // Announce ready to parent (if any)
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'rentR-ready' }, '*');
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

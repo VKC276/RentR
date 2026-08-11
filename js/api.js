@@ -1,68 +1,118 @@
 (function (global) {
-  var cbSeq = 0;
+  var seq = 0;
+  var pending = {};
+  var iframe = null;
+  var ready = false;
+  var readyWaiters = [];
+  var BRIDGE_TIMEOUT_MS = 60000;
 
-  function apiUrl() {
+  function apiBase() {
     var cfg = global.APP_CONFIG || {};
     if (!cfg.API_BASE_URL || cfg.API_BASE_URL.indexOf('REPLACE_ME') >= 0) {
-      return Promise.reject(new Error('Sätt API_BASE_URL i js/config.js'));
+      throw new Error('Sätt API_BASE_URL i js/config.js');
     }
-    return cfg.API_BASE_URL;
+    return cfg.API_BASE_URL.replace(/\/$/, '');
+  }
+
+  function ensureBridge() {
+    return new Promise(function (resolve, reject) {
+      if (ready && iframe) {
+        resolve();
+        return;
+      }
+      readyWaiters.push({ resolve: resolve, reject: reject });
+      if (iframe) return;
+
+      var src = apiBase() + '?bridge=1';
+      iframe = document.createElement('iframe');
+      iframe.src = src;
+      iframe.title = 'RentR API';
+      iframe.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute';
+      iframe.setAttribute('aria-hidden', 'true');
+
+      var bootTimer = setTimeout(function () {
+        failReady(new Error('API bridge timeout — kontrollera GAS-deploy (Anyone) och Bridge.html'));
+      }, BRIDGE_TIMEOUT_MS);
+
+      function onReady() {
+        if (ready) return;
+        ready = true;
+        clearTimeout(bootTimer);
+        var list = readyWaiters.splice(0);
+        list.forEach(function (w) { w.resolve(); });
+      }
+
+      function failReady(err) {
+        clearTimeout(bootTimer);
+        var list = readyWaiters.splice(0);
+        list.forEach(function (w) { w.reject(err); });
+      }
+
+      global.addEventListener('message', function (event) {
+        var data = event.data || {};
+        if (data.type === 'rentR-ready') {
+          onReady();
+          return;
+        }
+        if (data.type !== 'rentR-result' || !data.id) return;
+        var p = pending[data.id];
+        if (!p) return;
+        delete pending[data.id];
+        clearTimeout(p.timer);
+        if (data.ok) {
+          var result = data.result;
+          if (result && result.error) {
+            var err = new Error(result.error);
+            err.status = result.status || 500;
+            p.reject(err);
+          } else {
+            p.resolve(result);
+          }
+        } else {
+          p.reject(new Error(data.error || 'API-fel'));
+        }
+      });
+
+      iframe.onload = function () {
+        // Ask bridge to confirm (in case ready fired before listener)
+        try {
+          iframe.contentWindow.postMessage({ type: 'rentR-ping' }, '*');
+        } catch (e) { /* cross-origin until loaded */ }
+        // Also resolve after short delay if ready message already came
+        setTimeout(function () {
+          if (!ready) {
+            try {
+              iframe.contentWindow.postMessage({ type: 'rentR-ping' }, '*');
+            } catch (e2) {}
+          }
+        }, 1500);
+      };
+
+      iframe.onerror = function () {
+        failReady(new Error('API network error — kunde inte ladda GAS-bridge'));
+      };
+
+      document.body.appendChild(iframe);
+    });
   }
 
   function call(action, payload, sessionToken) {
-    return new Promise(function (resolve, reject) {
-      var base;
-      try {
-        base = (global.APP_CONFIG && global.APP_CONFIG.API_BASE_URL) || '';
-        if (!base || base.indexOf('REPLACE_ME') >= 0) {
-          reject(new Error('Sätt API_BASE_URL i js/config.js'));
-          return;
-        }
-      } catch (e) {
-        reject(e);
-        return;
-      }
-
-      var name = '__gas_cb_' + (++cbSeq) + '_' + Date.now();
-      var body = Object.assign({}, payload || {}, { action: action });
-      if (sessionToken) body.sessionToken = sessionToken;
-
-      var params = [
-        'action=' + encodeURIComponent(action),
-        'callback=' + encodeURIComponent(name),
-        'payload=' + encodeURIComponent(JSON.stringify(body))
-      ];
-      if (sessionToken) params.push('sessionToken=' + encodeURIComponent(sessionToken));
-
-      var script = document.createElement('script');
-      var timer = setTimeout(function () {
-        cleanup();
-        reject(new Error('API timeout'));
-      }, 45000);
-
-      function cleanup() {
-        clearTimeout(timer);
-        delete global[name];
-        if (script.parentNode) script.parentNode.removeChild(script);
-      }
-
-      global[name] = function (data) {
-        cleanup();
-        if (data && data.error) {
-          var err = new Error(data.error);
-          err.status = data.status || 500;
-          reject(err);
-        } else {
-          resolve(data);
-        }
-      };
-
-      script.src = base + (base.indexOf('?') >= 0 ? '&' : '?') + params.join('&');
-      script.onerror = function () {
-        cleanup();
-        reject(new Error('API network error'));
-      };
-      document.head.appendChild(script);
+    return ensureBridge().then(function () {
+      return new Promise(function (resolve, reject) {
+        var id = 'c' + (++seq) + '_' + Date.now();
+        var timer = setTimeout(function () {
+          delete pending[id];
+          reject(new Error('API timeout (' + action + ')'));
+        }, BRIDGE_TIMEOUT_MS);
+        pending[id] = { resolve: resolve, reject: reject, timer: timer };
+        iframe.contentWindow.postMessage({
+          type: 'rentR-call',
+          id: id,
+          action: action,
+          payload: payload || {},
+          sessionToken: sessionToken || ''
+        }, '*');
+      });
     });
   }
 

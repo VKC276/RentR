@@ -2,13 +2,21 @@
  * Web app entry points.
  * Deploy as web app: Execute as Me, Who has access: Anyone.
  *
- * CORS: browser clients should POST JSON with ?action=...
- * For GitHub Pages, use redirect mode or JSONP-like GET where needed.
- * Primary: POST with action query param.
+ * Frontend uses an HtmlService iframe bridge (?bridge=1) + google.script.run
+ * to avoid CORS/JSONP issues from GitHub Pages / custom domains.
  */
 
 function doGet(e) {
   e = e || { parameter: {} };
+
+  // postMessage bridge for external sites (Pages)
+  if (e.parameter.bridge === '1') {
+    return HtmlService
+      .createHtmlOutputFromFile('Bridge')
+      .setTitle('RentR Bridge')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
   var action = e.parameter.action || 'ping';
   try {
     ensureSchema();
@@ -16,7 +24,6 @@ function doGet(e) {
     if (e.parameter.payload) {
       try { body = JSON.parse(e.parameter.payload); } catch (err) { body = {}; }
     }
-    // Merge simple query fields
     ['startDate', 'endDate', 'bookingNumber', 'email', 't', 'apiKey', 'commandId', 'holdToken', 'bookingId', 'userId', 'padId', 'id'].forEach(function (k) {
       if (e.parameter[k] != null && e.parameter[k] !== '' && body[k] == null) body[k] = e.parameter[k];
     });
@@ -44,6 +51,23 @@ function doGet(e) {
 
 function doPost(e) {
   return handleApi_(e);
+}
+
+/**
+ * Called from Bridge.html via google.script.run
+ */
+function bridgeCall(action, payload, sessionToken) {
+  try {
+    ensureSchema();
+    payload = payload || {};
+    if (payload.action) action = payload.action;
+    var result = route_(action, payload, sessionToken || payload.sessionToken || '', { parameter: {} });
+    return result;
+  } catch (err) {
+    // google.script.run failure handler gets Error; also return structured object
+    var msg = err && err.message ? err.message : String(err);
+    throw new Error(msg);
+  }
 }
 
 /**
