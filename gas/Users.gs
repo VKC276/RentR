@@ -66,6 +66,11 @@ function updateUser_(userId, payload, actor) {
     patch.passwordHash = hashPassword_(payload.password, salt);
   }
   updateObjectById_(SHEET_NAMES.Users, userId, patch);
+  // Sessions carry a snapshot of the user, so they must be dropped when the
+  // account is disabled, renamed or given a new password.
+  if (patch.active === false || patch.email || patch.passwordHash) {
+    revokeSessionsForUser_(userId);
+  }
   return sanitizeUser_(findById_(SHEET_NAMES.Users, userId));
 }
 
@@ -76,6 +81,7 @@ function deleteUser_(userId, actor) {
     throw softError_('Sista aktiva admin kan inte raderas', 400);
   }
   deleteRowById_(SHEET_NAMES.Users, userId);
+  revokeSessionsForUser_(userId);
   return { ok: true };
 }
 

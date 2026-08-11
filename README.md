@@ -62,6 +62,19 @@ custom headers, since Apps Script cannot answer a preflight `OPTIONS`. If POST i
 the client falls back to GET and then JSONP (`?callback=`), picking the transport once per
 page load.
 
+## Performance notes
+
+Sheets round trips dominate response time, so the backend avoids them where it can:
+
+- Sessions live in `CacheService` with a `PropertiesService` backstop, not in a tab.
+  Each session stores a snapshot of the user, so an authenticated request reads no sheet
+  at all. There is deliberately no `Sessions` tab — delete it if your spreadsheet has one.
+- `readAllObjects_` memoises each tab for the duration of one request. Any new write path
+  must call `invalidateTable_`, or later reads in the same request will be stale.
+- `getConfig_` reads the `Config` tab once per request instead of once per lookup.
+- `updateObjectById_` writes the whole row in one call rather than one call per field.
+- Schema creation runs once, guarded by the `SCHEMA_READY` script property.
+
 ## 3. Raspberry Pi
 
 See [pi/README.md](pi/README.md).

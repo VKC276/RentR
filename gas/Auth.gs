@@ -21,36 +21,61 @@ function verifyPassword_(password, salt, expectedHash) {
   return hashPassword_(password, salt) === expectedHash;
 }
 
-function createSession_(userId) {
+/**
+ * Sessions live in CacheService with a PropertiesService backstop, never in the
+ * spreadsheet. Validating a session used to read the whole Sessions tab plus the
+ * Users tab, which made every admin request pay two sheet round trips.
+ *
+ * The user snapshot is stored inside the session, so an authenticated request
+ * touches no sheet at all.
+ */
+var SESSION_PREFIX = 'sess_';
+var CACHE_MAX_SEC = 21600; // CacheService hard limit: 6 hours
+
+function sessionStores_() {
+  return {
+    cache: CacheService.getScriptCache(),
+    props: PropertiesService.getScriptProperties()
+  };
+}
+
+function createSession_(user) {
   var hours = Number(getConfig_('sessionHours', '0'));
   var token = randomHex_(32);
   // 0 = never expires (until logout / cleared browser storage)
-  var expires = hours > 0
-    ? new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
-    : '9999-12-31T23:59:59.000Z';
-  appendObject_(SHEET_NAMES.Sessions, {
-    token: token,
-    userId: userId,
-    expiresAt: expires,
-    revoked: false,
-    createdAt: nowIso_()
+  var permanent = !(hours > 0);
+  var expires = permanent
+    ? '9999-12-31T23:59:59.000Z'
+    : new Date(Date.now() + hours * 3600 * 1000).toISOString();
+
+  var record = JSON.stringify({
+    userId: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    expiresAt: expires
   });
-  return { token: token, expiresAt: expires, permanent: !(hours > 0) };
+
+  var s = sessionStores_();
+  var key = SESSION_PREFIX + token;
+  // Properties keep the session alive past the cache's 6-hour ceiling.
+  s.props.setProperty(key, record);
+  var ttl = permanent
+    ? CACHE_MAX_SEC
+    : Math.max(60, Math.min(CACHE_MAX_SEC, Math.round(hours * 3600)));
+  try { s.cache.put(key, record, ttl); } catch (e) { /* cache is best effort */ }
+
+  return { token: token, expiresAt: expires, permanent: permanent };
 }
 
 function revokeSession_(token) {
-  var sheet = getSheet_(SHEET_NAMES.Sessions);
-  var data = sheet.getDataRange().getValues();
-  var headers = data[0].map(String);
-  var tokenCol = headers.indexOf('token');
-  var revokedCol = headers.indexOf('revoked');
-  for (var i = 1; i < data.length; i++) {
-    if (String(data[i][tokenCol]) === String(token)) {
-      sheet.getRange(i + 1, revokedCol + 1).setValue(true);
-      return true;
-    }
-  }
-  return false;
+  if (!token) return false;
+  var s = sessionStores_();
+  var key = SESSION_PREFIX + token;
+  try { s.cache.remove(key); } catch (e) { /* ignore */ }
+  s.props.deleteProperty(key);
+  return true;
 }
 
 function sessionExpired_(expiresAt) {
@@ -62,21 +87,50 @@ function sessionExpired_(expiresAt) {
 
 function getSessionUser_(token) {
   if (!token) return null;
-  var sessions = readAllObjects_(SHEET_NAMES.Sessions);
-  var session = null;
-  for (var i = 0; i < sessions.length; i++) {
-    if (String(sessions[i].token) === String(token)) {
-      session = sessions[i];
-      break;
-    }
+  var s = sessionStores_();
+  var key = SESSION_PREFIX + token;
+
+  var raw = null;
+  try { raw = s.cache.get(key); } catch (e) { /* ignore */ }
+  if (!raw) {
+    raw = s.props.getProperty(key);
+    // Warm the cache so the slow path is only paid once.
+    if (raw) { try { s.cache.put(key, raw, CACHE_MAX_SEC); } catch (e) { /* ignore */ } }
   }
-  if (!session) return null;
-  if (session.revoked === true || String(session.revoked) === 'true') return null;
-  if (sessionExpired_(session.expiresAt)) return null;
-  var user = findById_(SHEET_NAMES.Users, session.userId);
-  if (!user || user.active === false || String(user.active) === 'false') return null;
-  if (user.role !== 'admin') return null;
-  return sanitizeUser_(user);
+  if (!raw) return null;
+
+  var rec;
+  try { rec = JSON.parse(raw); } catch (e) { return null; }
+  if (sessionExpired_(rec.expiresAt)) {
+    revokeSession_(token);
+    return null;
+  }
+  if (rec.role !== 'admin') return null;
+
+  return {
+    id: rec.userId,
+    email: rec.email,
+    firstName: rec.firstName,
+    lastName: rec.lastName,
+    role: rec.role,
+    active: true
+  };
+}
+
+/**
+ * Deactivating or deleting a user must not leave their session usable.
+ */
+function revokeSessionsForUser_(userId) {
+  var s = sessionStores_();
+  var all = s.props.getProperties();
+  Object.keys(all).forEach(function (key) {
+    if (key.indexOf(SESSION_PREFIX) !== 0) return;
+    var rec;
+    try { rec = JSON.parse(all[key]); } catch (e) { return; }
+    if (String(rec.userId) !== String(userId)) return;
+    try { s.cache.remove(key); } catch (e) { /* ignore */ }
+    s.props.deleteProperty(key);
+  });
 }
 
 function requireAdmin_(token) {
@@ -90,28 +144,25 @@ function requireAdmin_(token) {
 }
 
 function loginAdmin_(email, password) {
-  var user = findByField_(SHEET_NAMES.Users, 'email', String(email || '').trim().toLowerCase());
-  if (!user || user.active === false || String(user.active) === 'false') {
-    var err = new Error('Fel e-post eller lösenord');
-    err.status = 401;
-    throw err;
-  }
-  // find by email case-insensitive — re-read raw for hash
+  var wanted = String(email || '').trim().toLowerCase();
   var all = readAllObjects_(SHEET_NAMES.Users);
   var raw = null;
   for (var i = 0; i < all.length; i++) {
-    if (String(all[i].email).toLowerCase() === String(email).trim().toLowerCase()) {
+    if (String(all[i].email).toLowerCase() === wanted) {
       raw = all[i];
       break;
     }
   }
-  if (!raw || !verifyPassword_(password, raw.salt, raw.passwordHash)) {
-    var err2 = new Error('Fel e-post eller lösenord');
-    err2.status = 401;
-    throw err2;
+
+  var active = raw && raw.active !== false && String(raw.active) !== 'false';
+  if (!raw || !active || !verifyPassword_(password, raw.salt, raw.passwordHash)) {
+    var err = new Error('Fel e-post eller lösenord');
+    err.status = 401;
+    throw err;
   }
-  var session = createSession_(raw.id);
-  return { user: sanitizeUser_(raw), session: session };
+
+  var user = sanitizeUser_(raw);
+  return { user: user, session: createSession_(user) };
 }
 
 function sanitizeUser_(user) {

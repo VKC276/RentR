@@ -4,7 +4,6 @@
 
 var SHEET_NAMES = {
   Users: 'Users',
-  Sessions: 'Sessions',
   Pads: 'Pads',
   PricingRules: 'PricingRules',
   Holds: 'Holds',
@@ -20,7 +19,6 @@ var SHEET_NAMES = {
 
 var HEADERS = {
   Users: ['id', 'email', 'firstName', 'lastName', 'passwordHash', 'salt', 'role', 'active', 'createdAt', 'updatedAt'],
-  Sessions: ['token', 'userId', 'expiresAt', 'revoked', 'createdAt'],
   Pads: ['id', 'name', 'description', 'pricePerDay', 'active', 'sortOrder'],
   PricingRules: ['id', 'dimension', 'minValue', 'percentOff', 'active', 'label'],
   Holds: ['id', 'holdToken', 'padIds', 'startDate', 'endDate', 'expiresAt', 'status', 'createdAt'],
@@ -55,12 +53,16 @@ function getSpreadsheet_() {
   return ssCache_;
 }
 
+var sheetCache_ = {};
+
 function getSheet_(name) {
+  if (sheetCache_[name]) return sheetCache_[name];
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(name);
   if (!sheet) {
     throw new Error('Flik saknas: ' + name);
   }
+  sheetCache_[name] = sheet;
   return sheet;
 }
 
@@ -76,6 +78,9 @@ function ensureSchema(force) {
   }
 
   var ss = getSpreadsheet_();
+  sheetCache_ = {};
+  tableCache_ = {};
+  configCache_ = null;
   Object.keys(HEADERS).forEach(function (name) {
     var sheet = ss.getSheetByName(name);
     if (!sheet) {
@@ -186,12 +191,18 @@ function randomHex_(bytes) {
   return arr.join('');
 }
 
+// getConfig_ is called many times per request; re-reading the Config tab each
+// time cost a full sheet round trip per lookup.
+var configCache_ = null;
+
 function readConfigMap_() {
+  if (configCache_) return configCache_;
   var rows = readAllObjects_(SHEET_NAMES.Config);
   var map = {};
   rows.forEach(function (r) {
     if (r.key) map[r.key] = String(r.value);
   });
+  configCache_ = map;
   return map;
 }
 
@@ -201,6 +212,7 @@ function getConfig_(key, fallback) {
 }
 
 function setConfig_(key, value) {
+  configCache_ = null;
   var sheet = getSheet_(SHEET_NAMES.Config);
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -212,22 +224,41 @@ function setConfig_(key, value) {
   sheet.appendRow([key, value]);
 }
 
+/**
+ * Rows are memoised for the duration of one request. Without this, helpers such
+ * as enrichBooking_ re-read the Pads and BookingPads tabs once per booking,
+ * turning the admin list into dozens of Sheets round trips.
+ *
+ * Callers get fresh shallow copies, so mutating a returned row cannot leak into
+ * later reads. Every write helper must call invalidateTable_.
+ */
+var tableCache_ = {};
+
+function invalidateTable_(sheetName) {
+  delete tableCache_[sheetName];
+}
+
 function readAllObjects_(sheetName) {
-  var sheet = getSheet_(sheetName);
-  var values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
-  var headers = values[0].map(String);
-  var out = [];
-  for (var i = 1; i < values.length; i++) {
-    var row = values[i];
-    if (row.every(function (c) { return c === '' || c === null; })) continue;
-    var obj = { _row: i + 1 };
-    headers.forEach(function (h, idx) {
-      obj[h] = normalizeCell_(row[idx]);
-    });
-    out.push(obj);
+  var cached = tableCache_[sheetName];
+  if (!cached) {
+    var sheet = getSheet_(sheetName);
+    var values = sheet.getDataRange().getValues();
+    cached = [];
+    if (values.length >= 2) {
+      var headers = values[0].map(String);
+      for (var i = 1; i < values.length; i++) {
+        var row = values[i];
+        if (row.every(function (c) { return c === '' || c === null; })) continue;
+        var obj = { _row: i + 1 };
+        headers.forEach(function (h, idx) {
+          obj[h] = normalizeCell_(row[idx]);
+        });
+        cached.push(obj);
+      }
+    }
+    tableCache_[sheetName] = cached;
   }
-  return out;
+  return cached.map(function (o) { return Object.assign({}, o); });
 }
 
 function normalizeCell_(v) {
@@ -250,6 +281,7 @@ function appendObject_(sheetName, obj) {
     return v;
   });
   getSheet_(sheetName).appendRow(row);
+  invalidateTable_(sheetName);
 }
 
 function updateObjectById_(sheetName, id, patch) {
@@ -260,11 +292,15 @@ function updateObjectById_(sheetName, id, patch) {
   if (idCol < 0) throw new Error('id-kolumn saknas i ' + sheetName);
   for (var i = 1; i < values.length; i++) {
     if (String(values[i][idCol]) === String(id)) {
+      // One setValues for the whole row instead of a round trip per field.
+      var row = values[i].slice();
       headers.forEach(function (h, col) {
         if (Object.prototype.hasOwnProperty.call(patch, h)) {
-          sheet.getRange(i + 1, col + 1).setValue(patch[h]);
+          row[col] = patch[h];
         }
       });
+      sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+      invalidateTable_(sheetName);
       return true;
     }
   }
@@ -296,6 +332,7 @@ function deleteRowById_(sheetName, id) {
   for (var i = 1; i < values.length; i++) {
     if (String(values[i][idCol]) === String(id)) {
       sheet.deleteRow(i + 1);
+      invalidateTable_(sheetName);
       return true;
     }
   }
@@ -320,5 +357,6 @@ function nextBookingNumber_() {
   if (!found) {
     sheet.appendRow([key, seq]);
   }
+  invalidateTable_(SHEET_NAMES.Counters);
   return year + '-' + pad(seq, 5);
 }

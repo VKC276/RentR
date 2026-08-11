@@ -8,6 +8,18 @@ function getBookingPads_(bookingId) {
     .map(function (bp) { return bp.padId; });
 }
 
+function replaceBookingPads_(bookingId, padIds) {
+  var sheet = getSheet_(SHEET_NAMES.BookingPads);
+  var values = sheet.getDataRange().getValues();
+  for (var i = values.length - 1; i >= 1; i--) {
+    if (String(values[i][0]) === String(bookingId)) sheet.deleteRow(i + 1);
+  }
+  invalidateTable_(SHEET_NAMES.BookingPads);
+  (padIds || []).forEach(function (pid) {
+    appendObject_(SHEET_NAMES.BookingPads, { bookingId: bookingId, padId: pid });
+  });
+}
+
 function createMagicToken_(bookingId) {
   var days = Number(getConfig_('magicLinkDays', '90'));
   var token = randomHex_(32);
@@ -248,15 +260,7 @@ function guestRequestChange_(token, payload) {
     patch.priceDiscount = price.priceDiscount;
     patch.priceTotal = price.priceTotal;
     patch.priceBreakdownJson = JSON.stringify(price);
-    // replace pads
-    var sheet = getSheet_(SHEET_NAMES.BookingPads);
-    var values = sheet.getDataRange().getValues();
-    for (var i = values.length - 1; i >= 1; i--) {
-      if (String(values[i][0]) === b.id) sheet.deleteRow(i + 1);
-    }
-    padIds.forEach(function (pid) {
-      appendObject_(SHEET_NAMES.BookingPads, { bookingId: b.id, padId: pid });
-    });
+    replaceBookingPads_(b.id, padIds);
   }
 
   updateObjectById_(SHEET_NAMES.Bookings, b.id, patch);
@@ -327,12 +331,7 @@ function adminUpdateBooking_(bookingId, payload, actor) {
     if (payload.padId) {
       var newPad = String(payload.padId);
       assertPadsAvailable_([newPad], b.startDate, b.endDate, b.id);
-      var sheet = getSheet_(SHEET_NAMES.BookingPads);
-      var values = sheet.getDataRange().getValues();
-      for (var i = values.length - 1; i >= 1; i--) {
-        if (String(values[i][0]) === b.id) sheet.deleteRow(i + 1);
-      }
-      appendObject_(SHEET_NAMES.BookingPads, { bookingId: b.id, padId: newPad });
+      replaceBookingPads_(b.id, [newPad]);
       var price = calculatePrice_([newPad], b.startDate, b.endDate);
       patch.priceBase = price.priceBase;
       patch.priceDiscount = price.priceDiscount;
