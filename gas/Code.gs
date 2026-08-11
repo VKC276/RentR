@@ -50,6 +50,6 @@ function doPost(e) {
  * One-time setup helper — run manually in Apps Script editor after setting SPREADSHEET_ID.
  */
 function setupSpreadsheet() {
-  ensureSchema();
+  ensureSchema(true);
   Logger.log('Schema + seed klart. Standardadmin: admin@example.com / Admin123!');
 }

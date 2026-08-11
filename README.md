@@ -36,6 +36,9 @@ templates/       Sheet xlsx template
    - `PASSWORD_PEPPER` — long random string (auto-created on first seed if missing)
    - `PI_API_KEY` — shared secret for the Pi
 5. Run `setupSpreadsheet` once in the editor (or call API `action=setup`).
+   Schema creation is skipped on later requests via the `SCHEMA_READY` script property,
+   since re-checking every sheet added seconds to each call. Run `setupSpreadsheet`
+   again after changing `HEADERS` (or bump `SCHEMA_VERSION` in `Sheets.gs`).
 6. Deploy → **Web app**
    - Execute as: **Me**
    - Who has access: **Anyone**

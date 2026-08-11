@@ -40,12 +40,19 @@ var HEADERS = {
   Counters: ['key', 'value']
 };
 
+/** Bump when HEADERS change so the next request rebuilds the schema. */
+var SCHEMA_VERSION = 'v1';
+
+var ssCache_ = null;
+
 function getSpreadsheet_() {
+  if (ssCache_) return ssCache_;
   var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
   if (!id) {
     throw new Error('SPREADSHEET_ID saknas i Script Properties');
   }
-  return SpreadsheetApp.openById(id);
+  ssCache_ = SpreadsheetApp.openById(id);
+  return ssCache_;
 }
 
 function getSheet_(name) {
@@ -57,7 +64,17 @@ function getSheet_(name) {
   return sheet;
 }
 
-function ensureSchema() {
+/**
+ * Creates sheets, headers and seed rows. This costs a dozen Sheets round trips,
+ * so once it has succeeded for the current SCHEMA_VERSION it is skipped on
+ * every later request. Pass true (or run setupSpreadsheet) to force it.
+ */
+function ensureSchema(force) {
+  var props = PropertiesService.getScriptProperties();
+  if (!force && props.getProperty('SCHEMA_READY') === SCHEMA_VERSION) {
+    return { ok: true, cached: true };
+  }
+
   var ss = getSpreadsheet_();
   Object.keys(HEADERS).forEach(function (name) {
     var sheet = ss.getSheetByName(name);
@@ -79,6 +96,7 @@ function ensureSchema() {
     try { ss.deleteSheet(sheet1); } catch (e) { /* ignore */ }
   }
   seedIfEmpty_();
+  props.setProperty('SCHEMA_READY', SCHEMA_VERSION);
   return { ok: true };
 }
 

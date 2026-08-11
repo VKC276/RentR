@@ -34,7 +34,7 @@ function route_(action, body, sessionToken, e) {
     case 'ping':
       return { ok: true, time: nowIso_() };
     case 'setup':
-      return ensureSchema();
+      return ensureSchema(true);
     case 'getPublicConfig':
       return getPublicConfig_();
     case 'getAvailability':
