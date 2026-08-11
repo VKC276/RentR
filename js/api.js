@@ -4,7 +4,7 @@
   function apiUrl() {
     var cfg = global.APP_CONFIG || {};
     if (!cfg.API_BASE_URL || cfg.API_BASE_URL.indexOf('REPLACE_ME') >= 0) {
-      return Promise.reject(new Error('Sätt API_BASE_URL i web/js/config.js'));
+      return Promise.reject(new Error('Sätt API_BASE_URL i js/config.js'));
     }
     return cfg.API_BASE_URL;
   }
@@ -15,7 +15,7 @@
       try {
         base = (global.APP_CONFIG && global.APP_CONFIG.API_BASE_URL) || '';
         if (!base || base.indexOf('REPLACE_ME') >= 0) {
-          reject(new Error('Sätt API_BASE_URL i web/js/config.js'));
+          reject(new Error('Sätt API_BASE_URL i js/config.js'));
           return;
         }
       } catch (e) {

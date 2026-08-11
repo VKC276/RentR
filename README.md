@@ -20,14 +20,15 @@ Hybrid **GitHub Pages** UI + **Google Apps Script** JSON API with data in **Goog
 ## Repo layout
 
 ```
-web/     GitHub Pages frontend
-gas/     Apps Script backend (clasp)
-pi/      Door relay poller
+/                GitHub Pages frontend (index.html, admin/, js/, css/)
+gas/             Apps Script backend (clasp)
+pi/              Door relay poller
+templates/       Sheet xlsx template
 ```
 
 ## 1. Google Sheet + Apps Script
 
-1. Create an empty Google Spreadsheet.
+1. Create an empty Google Spreadsheet (or upload `templates/crashpad-booking-sheets.xlsx`).
 2. Create a new Apps Script project (or `npm i -g @google/clasp && clasp login && clasp create`).
 3. Copy `gas/*` into the project (`clasp push` with `.clasp.json` from `.clasp.json.example`).
 4. Set **Script properties**:
@@ -44,16 +45,11 @@ Default admin after seed: `admin@example.com` / `Admin123!` — **change immedia
 
 ## 2. GitHub Pages
 
-1. Set `web/js/config.js` (already set for this project):
+Live: **http://ledinfo.vastervikclimbing.se/RentR/**
 
-```js
-window.APP_CONFIG = {
-  API_BASE_URL: 'https://script.google.com/macros/s/AKfycbzxv-RrDMEWpQUQ8oG6ZNl2P6dJoAZEH4fOdBbpV-GU2hO4xk1SMFovYEu4DN04qNDGrQ/exec'
-};
-```
-
-2. In Sheet `Config`, set `pagesBaseUrl` to your Pages URL (no trailing slash), e.g. `https://USER.github.io/REPO`.
-3. Enable Pages: Settings → Pages → Deploy from branch → folder **`/web`** (or root if you serve `web/` as site root).
+1. `js/config.js` is already set to the GAS `/exec` URL.
+2. In Sheet `Config`, set `pagesBaseUrl` to `http://ledinfo.vastervikclimbing.se/RentR` (no trailing slash).
+3. Pages: deploy from branch `main`, folder **`/` (root)**.
 4. Open the site and book a test period.
 
 API calls use JSONP (GET + `callback`) so the browser can talk to Apps Script without CORS.

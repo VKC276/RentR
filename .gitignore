@@ -1,6 +1,4 @@
-node_modules/
-.clasp.json
-web/js/config.local.js
+js/config.local.js
 .env
 .env.local
 script-properties.local.txt
@@ -8,3 +6,5 @@ script-properties.local.txt
 __pycache__/
 .DS_Store
 *.log
+node_modules/
+.clasp.json

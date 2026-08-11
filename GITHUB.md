@@ -1,14 +1,26 @@
-# GitHub — nästa steg
+# GitHub Pages — RentR
 
-När repot finns (tomt eller med README):
+Live site: **http://ledinfo.vastervikclimbing.se/RentR/**
 
-1. Lägg till remote, t.ex. `git remote add origin https://github.com/USER/REPO.git`
-2. Pusha hela projektet (agenten kan köra `git add` / `commit` / `push` om du ber om det)
-3. Aktivera **GitHub Pages**: Settings → Pages → Source: Deploy from a branch → Branch `main` → Folder **`/web`**
-4. Sätt i Google Sheet **Config** → `pagesBaseUrl` till `https://USER.github.io/REPO` (ingen trailing slash)
+## Structure
 
-Redan klart i repot:
-- `web/js/config.js` pekar på GAS `/exec`
-- `gas/` = Apps Script-källkod
-- `templates/crashpad-booking-sheets.xlsx` = Sheet-mall
-- Hemligheter ligger i gitignorerad `script-properties.local.txt` (pusha den inte)
+Frontend ligger i **repo-roten** (`index.html`, `admin/`, `js/`, `css/`, …).  
+GAS-kod i `gas/`, Pi i `pi/`.
+
+## Pages
+
+Settings → Pages → Deploy from branch → `main` → folder **`/` (root)**.
+
+## Sheet Config
+
+Sätt (eller behåll):
+
+| key | value |
+|-----|-------|
+| `pagesBaseUrl` | `http://ledinfo.vastervikclimbing.se/RentR` |
+
+Ingen trailing slash. Mejllänkar byggs som `{pagesBaseUrl}/booking.html?t=…` m.m.
+
+## GAS
+
+`js/config.js` innehåller redan `/exec`-URL:n.
