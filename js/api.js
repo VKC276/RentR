@@ -35,10 +35,12 @@
     try {
       data = JSON.parse(text);
     } catch (e) {
-      if (/<\s*html/i.test(text) || /accounts\.google\.com/i.test(text)) {
-        throw new Error('Web appen returnerade en inloggningssida. Deploya om med "Vem har åtkomst: Alla".');
+      if (/accounts\.google\.com|ServiceLogin/i.test(text)) {
+        throw new Error('Web appen kräver inloggning. Deploya om med "Vem har åtkomst: Alla".');
       }
-      throw new Error('Ogiltigt svar från servern');
+      // Apps Script error pages are HTML; surface the text so the real cause is visible.
+      var snippet = String(text).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 250);
+      throw new Error('Oväntat svar från servern: ' + (snippet || '(tomt svar)'));
     }
     if (data && data.error) {
       var err = new Error(data.error);

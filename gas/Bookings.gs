@@ -117,7 +117,10 @@ function computeOpenDoorFlags_(b) {
 }
 
 function submitBooking_(payload) {
-  var hold = consumeHold_(payload.holdToken);
+  // The hold is only consumed once the booking rows exist. Consuming it up
+  // front meant any later failure burned it, and the retry hit
+  // "Hold ogiltig eller utgången" while the countdown still looked fine.
+  var hold = requireActiveHold_(payload.holdToken);
   var padIds = parsePadIds_(hold.padIds);
   var startDate = hold.startDate;
   var endDate = hold.endDate;
@@ -132,7 +135,8 @@ function submitBooking_(payload) {
     throw softError_('Förnamn, efternamn, e-post och telefon krävs', 400);
   }
 
-  assertPadsAvailable_(padIds, startDate, endDate, null);
+  // This booking's own hold must not count as a conflict against itself.
+  assertPadsAvailable_(padIds, startDate, endDate, null, hold.holdToken);
   var price = calculatePrice_(padIds, startDate, endDate);
   var bookingNumber = nextBookingNumber_();
   var id = uid_();
@@ -168,6 +172,8 @@ function submitBooking_(payload) {
   padIds.forEach(function (pid) {
     appendObject_(SHEET_NAMES.BookingPads, { bookingId: id, padId: pid });
   });
+
+  updateObjectById_(SHEET_NAMES.Holds, hold.id, { status: 'consumed' });
 
   var magic = createMagicToken_(id);
   logEvent_(id, 'created', email, { bookingNumber: bookingNumber });

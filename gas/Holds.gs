@@ -86,12 +86,6 @@ function requireActiveHold_(holdToken) {
   return hold;
 }
 
-function consumeHold_(holdToken) {
-  var hold = requireActiveHold_(holdToken);
-  updateObjectById_(SHEET_NAMES.Holds, hold.id, { status: 'consumed' });
-  return hold;
-}
-
 function getActiveHolds_() {
   expireHolds_();
   return readAllObjects_(SHEET_NAMES.Holds).filter(function (h) {
@@ -99,8 +93,8 @@ function getActiveHolds_() {
   });
 }
 
-function assertPadsAvailable_(padIds, startDate, endDate, ignoreBookingId) {
-  var conflicts = findConflicts_(padIds, startDate, endDate, ignoreBookingId, null);
+function assertPadsAvailable_(padIds, startDate, endDate, ignoreBookingId, ignoreHoldToken) {
+  var conflicts = findConflicts_(padIds, startDate, endDate, ignoreBookingId, ignoreHoldToken || null);
   if (conflicts.length) {
     throw softError_('En eller flera crashpads är inte lediga för valt intervall', 409);
   }

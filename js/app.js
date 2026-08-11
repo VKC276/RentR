@@ -146,10 +146,19 @@
     showErr('errPads');
     if (!state.selected.length) return;
     $('btnHold').disabled = true;
-    Api.call('createHold', {
-      padIds: state.selected,
-      startDate: state.startDate,
-      endDate: state.endDate
+    // An earlier hold of ours would otherwise block the pads we are re-picking.
+    var prev = state.hold;
+    state.hold = null;
+    var released = prev
+      ? Api.call('releaseHold', { holdToken: prev.holdToken }).catch(function () {})
+      : Promise.resolve();
+
+    released.then(function () {
+      return Api.call('createHold', {
+        padIds: state.selected,
+        startDate: state.startDate,
+        endDate: state.endDate
+      });
     }).then(function (hold) {
       state.hold = hold;
       $('stepForm').hidden = false;
