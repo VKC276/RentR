@@ -284,18 +284,39 @@ function guestRequestChange_(token, payload) {
   return { booking: booking };
 }
 
-function guestRequestCancel_(token) {
+/**
+ * Once equipment is handed out or returned, the booking has already happened;
+ * anything from there on has to go through an admin. CancelPending only occurs
+ * on rows left over from the old flow, where an admin approved the cancellation.
+ */
+var GUEST_CANCELLABLE_STATUSES = ['Requested', 'Approved', 'ChangePending', 'CancelPending'];
+
+/**
+ * Cancels on the spot. Only BLOCKING_STATUSES reserve the pads, so leaving them
+ * frees the dates, and the write bumps the data version, which rebuilds the
+ * cached calendar and availability answers.
+ */
+function guestCancelBooking_(token) {
   var t = resolveMagicToken_(token);
   if (!t) throw softError_('Ogiltig länk', 401);
   var b = findById_(SHEET_NAMES.Bookings, t.bookingId);
   if (!b) throw softError_('Bokning saknas', 404);
-  if (['Approved', 'Requested', 'ChangePending'].indexOf(b.status) < 0) {
-    throw softError_('Avbokning kan inte begäras i nuvarande status', 400);
+  if (GUEST_CANCELLABLE_STATUSES.indexOf(b.status) < 0) {
+    throw softError_(
+      'Bokningen kan inte avbokas när den har status ' +
+      statusLabel_(b.status, b.locale || 'sv') + '. Kontakta oss om något behöver ändras.',
+      400
+    );
   }
-  updateObjectById_(SHEET_NAMES.Bookings, b.id, { status: 'CancelPending', updatedAt: nowIso_() });
-  logEvent_(b.id, 'cancel_requested', b.email, {});
+  updateObjectById_(SHEET_NAMES.Bookings, b.id, { status: 'Cancelled', updatedAt: nowIso_() });
+  logEvent_(b.id, 'cancelled', b.email, { by: 'guest' });
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, b.id));
-  try { mailAdminCancel_(booking); } catch (e) {}
+  try {
+    mailGuestCancelled_(booking);
+    mailAdminCancelled_(booking);
+  } catch (e) {
+    // a mail failure must not undo the cancellation
+  }
   return { booking: booking };
 }
 
@@ -351,9 +372,6 @@ function adminUpdateBooking_(bookingId, payload, actor) {
   if (action === 'approve') {
     if (b.status === 'Requested' || b.status === 'ChangePending') {
       patch.status = 'Approved';
-    } else if (b.status === 'CancelPending') {
-      // reject cancel -> back to Approved
-      patch.status = 'Approved';
     } else {
       throw softError_('Kan inte godkänna i status ' + b.status, 400);
     }
@@ -361,12 +379,7 @@ function adminUpdateBooking_(bookingId, payload, actor) {
     if (b.status === 'Requested') patch.status = 'Rejected';
     else if (b.status === 'ChangePending') {
       patch.status = 'Approved';
-    } else if (b.status === 'CancelPending') {
-      // reject cancellation → keep booking
-      patch.status = 'Approved';
     } else throw softError_('Kan inte avslå i status ' + b.status, 400);
-  } else if (action === 'approveCancel') {
-    patch.status = 'Cancelled';
   } else if (action === 'handOut') {
     if (payload.padId) {
       var newPad = String(payload.padId);
@@ -400,7 +413,7 @@ function adminUpdateBooking_(bookingId, payload, actor) {
   logEvent_(bookingId, action, actor.email, payload);
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, bookingId));
   try {
-    if (action === 'approve' || action === 'reject' || action === 'approveCancel' || action === 'handOut' || action === 'return') {
+    if (action === 'approve' || action === 'reject' || action === 'handOut' || action === 'return') {
       mailGuestStatus_(booking);
     }
   } catch (e) {}

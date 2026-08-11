@@ -5,6 +5,30 @@
 
   function $(id) { return document.getElementById(id); }
 
+  /**
+   * Statuses are stored and filtered on as English keys; this is the only place
+   * that turns one into the Swedish text the admin reads. CancelPending can no
+   * longer arise — a guest cancellation is immediate — but rows from the old
+   * flow may still carry it.
+   */
+  var STATUS_LABELS = {
+    Requested: 'Förfrågan',
+    Approved: 'Godkänd',
+    ChangePending: 'Ändring väntar',
+    CancelPending: 'Avbokning väntar',
+    HandedOut: 'Utlämnad',
+    Returned: 'Återlämnad',
+    Cancelled: 'Avbokad',
+    Rejected: 'Avslagen'
+  };
+
+  function statusLabel(status) {
+    return STATUS_LABELS[status] || status;
+  }
+
+  /** Only statuses a booking can still reach are worth filtering on. */
+  var FILTER_STATUSES = ['Requested', 'Approved', 'ChangePending', 'HandedOut', 'Returned', 'Cancelled', 'Rejected'];
+
   var BUSY = {
     login: 'Loggar in…',
     logout: 'Loggar ut…',
@@ -12,8 +36,8 @@
     adminOverview: 'Hämtar bokningar…',
     listBookings: 'Hämtar bokningar…',
     adminUpdateBooking: 'Sparar bokningen…',
-    availablePadsForBooking: 'Kontrollerar lediga crashpads…',
-    listPads: 'Hämtar crashpads…',
+    availablePadsForBooking: 'Kontrollerar ledig utrustning…',
+    listPads: 'Hämtar utrustning…',
     updatePad: 'Sparar pris…',
     listPricingRules: 'Hämtar rabattregler…',
     savePricingRule: 'Sparar rabattregel…',
@@ -113,7 +137,7 @@
           '<span class="sub">' + escapeHtml(b.email) + '</span></span>' +
         '<span class="b-period">' + b.startDate + ' – ' + b.endDate +
           '<span class="sub">' + b.days + ' dygn</span></span>' +
-        '<span class="b-status"><span class="badge">' + escapeHtml(b.status) + '</span></span>' +
+        '<span class="b-status"><span class="badge">' + escapeHtml(statusLabel(b.status)) + '</span></span>' +
         '<span class="b-price">' + b.priceTotal + ' SEK' +
           '<span class="sub"><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' +
           (b.paid ? 'Betald' : 'Obetald') + '</span></span></span>' +
@@ -146,9 +170,9 @@
     document.body.classList.add('modal-open');
     $('detailTitle').textContent = b.bookingNumber;
     var html = '';
-    html += '<p><strong>' + b.bookingNumber + '</strong> — ' + b.status + '</p>';
+    html += '<p><strong>' + b.bookingNumber + '</strong> — ' + escapeHtml(statusLabel(b.status)) + '</p>';
     html += '<p>' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' + escapeHtml(b.phone) + ' · ' + escapeHtml(b.email) + '</p>';
-    html += '<p>Pads: ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
+    html += '<p>Utrustning: ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
     html += '<p>' + b.startDate + ' – ' + b.endDate + ' (' + b.days + ' dygn inkl.)</p>';
     html += '<p>Summa: <strong>' + b.priceTotal + ' SEK</strong></p>';
     html += '<div class="check-row">';
@@ -159,10 +183,6 @@
     if (b.status === 'Requested' || b.status === 'ChangePending') {
       html += '<button type="button" id="actApprove">Godkänn</button>';
       html += '<button type="button" class="ghost" id="actReject">Avslå</button>';
-    }
-    if (b.status === 'CancelPending') {
-      html += '<button type="button" id="actApproveCancel">Godkänn avbokning</button>';
-      html += '<button type="button" class="ghost" id="actKeep">Behåll bokning</button>';
     }
     if (b.status === 'Approved') {
       html += '<button type="button" class="warn" id="actHandOut">Lämna ut</button>';
@@ -204,8 +224,6 @@
 
     onAct('actApprove', 'approve');
     onAct('actReject', 'reject');
-    onAct('actApproveCancel', 'approveCancel');
-    onAct('actKeep', 'approve');
     onAct('actReturn', 'return');
     onAct('actPaid', 'setPaid', { paid: !b.paid });
     onAct('actFlags', 'setFlags', function () {
@@ -218,7 +236,7 @@
       $('actHandOut').onclick = function () {
         var box = $('handOutBox');
         box.hidden = false;
-        box.innerHTML = '<p><strong>Lämna ut</strong></p><p id="hoPads">Laddar lediga pads…</p>';
+        box.innerHTML = '<p><strong>Lämna ut</strong></p><p id="hoPads">Laddar ledig utrustning…</p>';
         api('availablePadsForBooking', { bookingId: b.id }, $('actHandOut')).then(function (res) {
           var pads = res.pads || [];
           var opts = pads.map(function (p) {
@@ -228,7 +246,7 @@
           box.innerHTML =
             '<p>Detaljer: ' + escapeHtml(b.firstName + ' ' + b.lastName) + ', ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) +
             ', ' + b.startDate + '–' + b.endDate + '</p>' +
-            '<label>Crashpad</label><select id="hoSelect">' + opts + '</select>' +
+            '<label>Utrustning</label><select id="hoSelect">' + opts + '</select>' +
             '<div class="actions"><button type="button" id="hoOk">OK</button>' +
             '<button type="button" class="ghost" id="hoChange">Ändra &amp; lämna ut</button></div>';
           onAct('hoOk', 'handOut', function () { return { padId: $('hoSelect').value }; });
@@ -353,6 +371,16 @@
     });
   };
 
+  function fillStatusFilter() {
+    var select = $('filterStatus');
+    FILTER_STATUSES.forEach(function (status) {
+      var opt = document.createElement('option');
+      opt.value = status;
+      opt.textContent = statusLabel(status);
+      select.appendChild(opt);
+    });
+  }
+
   $('btnReload').onclick = loadBookings;
   $('searchNo').onchange = loadBookings;
   $('filterStatus').onchange = loadBookings;
@@ -362,6 +390,8 @@
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
     });
   }
+
+  fillStatusFilter();
 
   if (session) {
     // adminOverview already rejects an invalid session, so no separate 'me' call.

@@ -140,7 +140,7 @@ function computePublicConfig_() {
   });
 
   return {
-    appName: getConfig_('appName', 'Crashpad Booking'),
+    appName: getConfig_('appName', APP_NAME),
     currency: getConfig_('currency', 'SEK'),
     holdMinutes: Number(getConfig_('holdMinutes', '15')),
     defaultPricePerDay: Number(getConfig_('defaultPricePerDay', '150')),

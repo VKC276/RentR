@@ -74,7 +74,7 @@ function calculatePrice_(padIds, startDate, endDate) {
   (padIds || []).forEach(function (pid) {
     var pad = padMap[pid];
     if (!pad || (pad.active === false || pad.active === 'false')) {
-      throw softError_('Ogiltig crashpad: ' + pid, 400);
+      throw softError_('Ogiltig utrustning: ' + pid, 400);
     }
     var price = Number(pad.pricePerDay);
     if (!price || isNaN(price)) price = defaultPrice;
@@ -82,7 +82,7 @@ function calculatePrice_(padIds, startDate, endDate) {
     padLines.push({ padId: pid, name: pad.name, pricePerDay: price });
   });
 
-  if (!padLines.length) throw softError_('Välj minst en crashpad', 400);
+  if (!padLines.length) throw softError_('Välj utrustning att boka', 400);
 
   var base = perDaySum * days;
   var rules = getActivePricingRules_();

@@ -1,12 +1,13 @@
-# Crashpad booking system
+# RentR booking system
 
 Hybrid **GitHub Pages** UI + **Google Apps Script** JSON API with data in **Google Sheets**.
 
 ## Features
 
-- Calendar availability for ~10–15 crashpads
+- Calendar availability for ~10–15 rentable items (crashpads and other equipment)
 - 15-minute hold lock while booking
 - Booking request → admin approval workflow
+- Guest cancellation takes effect immediately and frees the dates
 - Unique booking number (`2026-00042`)
 - Guest magic link + lookup by number + email
 - Pricing per day + discount tiers (days / pads)
@@ -82,7 +83,14 @@ See [pi/README.md](pi/README.md).
 ## Status flow
 
 `Requested` → `Approved` → `HandedOut` → `Returned`  
-(+ `ChangePending` / `CancelPending` / `Rejected` / `Cancelled`)
+(+ `ChangePending` / `Rejected` / `Cancelled`)
+
+Statuses are stored as these English keys everywhere. The admin UI shows Swedish labels
+from `STATUS_LABELS` in `admin/admin.js`, the guest pages use the `status_*` keys in
+`js/i18n.js`. A guest cancels from the manage page up until hand-out; the booking goes
+straight to `Cancelled` and admins get a notification mail. `CancelPending` is a leftover
+from the old approve-the-cancellation flow and is only kept so existing rows keep
+reserving their dates.
 
 ## Security notes
 

@@ -1,4 +1,4 @@
-/* Crashpad booking — shared styles */
+/* RentR — shared styles */
 :root {
   --bg: #e8eef2;
   --bg2: #d4e0e8;
@@ -202,11 +202,111 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .cal-legend i.taken { background: #c9d2d7; }
 .cal-loading { opacity: 0.45; pointer-events: none; }
+
+/* The next click is the only thing the guest has to understand here, so the
+   instruction sits on the calendar as a step marker rather than as a caption. */
+.cal-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(13, 110, 110, 0.22);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(13, 110, 110, 0.13), rgba(13, 110, 110, 0.03));
+}
+.cal-prompt-step {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.cal-prompt-text { min-width: 0; }
+.cal-prompt-title {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+.cal-prompt-hint { display: block; font-size: 0.85rem; margin-top: 0.1rem; }
+.cal-prompt.is-done {
+  border-color: rgba(27, 127, 78, 0.28);
+  border-left-color: var(--ok);
+  background: linear-gradient(135deg, rgba(27, 127, 78, 0.13), rgba(27, 127, 78, 0.03));
+}
+.cal-prompt.is-done .cal-prompt-step { background: var(--ok); }
+
+.date-summary {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(13, 110, 110, 0.09), rgba(196, 92, 38, 0.06));
+}
+.ds-range {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+}
+.ds-leg { flex: 1 1 8rem; min-width: 0; }
+.ds-leg-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ds-leg-date {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 0.1rem;
+}
+.ds-leg.is-pending .ds-leg-date { color: var(--muted); font-weight: 600; }
+.ds-arrow { flex: 0 0 auto; color: var(--muted); font-size: 1.15rem; line-height: 1; padding-bottom: 0.3rem; }
+.ds-count { flex: 0 0 auto; margin-left: auto; }
+.badge.ds-days {
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.95rem;
+  padding: 0.35rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.ds-note { margin: 0.65rem 0 0; font-size: 0.85rem; }
+.ds-price { margin-top: 0.75rem; padding-top: 0.7rem; border-top: 1px dashed var(--line); }
+.ds-price-list { display: grid; gap: 0.3rem; }
+.ds-price-row { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.95rem; }
+.ds-price-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ds-price-row.is-discount { color: var(--ok); }
+.ds-price-row.is-total { font-size: 1.1rem; font-weight: 700; }
+.ds-price-head { font-size: 0.85rem; margin-bottom: 0.5rem; }
+.ds-pending { margin: 0; font-size: 0.9rem; }
+.ds-actions { margin: 0.8rem 0 0; }
 @media (max-width: 520px) {
   .cal { gap: 2px; }
   .cal-day { min-height: 54px; padding: 3px; }
   .cal-pads { grid-template-columns: repeat(4, 6px); }
   .cal-pads i { width: 6px; height: 6px; }
+  .ds-range {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: end;
+    gap: 0.5rem;
+  }
+  .ds-count { grid-column: 1 / -1; margin-left: 0; }
+  .ds-leg-date { font-size: 1rem; }
 }
 .pad-grid {
   display: grid;

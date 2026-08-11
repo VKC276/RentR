@@ -7,6 +7,9 @@
  * supports ?callback= for a JSONP fallback.
  */
 
+/** Product name. The Config key appName overrides it per installation. */
+var APP_NAME = 'RentR';
+
 function doGet(e) {
   e = e || { parameter: {} };
 

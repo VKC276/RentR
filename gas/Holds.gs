@@ -2,6 +2,11 @@
  * 15-minute hold locks for selected pads.
  */
 
+/**
+ * CancelPending is kept because rows from the old flow, where an admin had to
+ * approve a cancellation, must keep reserving their dates until someone decides
+ * what to do with them. A guest cancellation now writes Cancelled directly.
+ */
 var BLOCKING_STATUSES = {
   Requested: true,
   Approved: true,
@@ -49,7 +54,7 @@ function createHold_(padIds, startDate, endDate, replaceHoldToken) {
   expireHolds_();
   calcDays_(startDate, endDate); // validate
   padIds = (padIds || []).map(String);
-  if (!padIds.length) throw softError_('Välj minst en crashpad', 400);
+  if (!padIds.length) throw softError_('Välj utrustning att boka', 400);
 
   if (replaceHoldToken) releaseHold_(replaceHoldToken);
   assertPadsAvailable_(padIds, startDate, endDate, null, replaceHoldToken || null);
@@ -134,7 +139,7 @@ function holdAwareTtl_() {
 function assertPadsAvailable_(padIds, startDate, endDate, ignoreBookingId, ignoreHoldToken) {
   var conflicts = findConflicts_(padIds, startDate, endDate, ignoreBookingId, ignoreHoldToken || null);
   if (conflicts.length) {
-    throw softError_('En eller flera crashpads är inte lediga för valt intervall', 409);
+    throw softError_('Vald utrustning är inte ledig för valt intervall', 409);
   }
 }
 

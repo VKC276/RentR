@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="/RentR/" />
-  <title>Crashpad booking</title>
+  <title>RentR — Book</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div class="brand" id="brand">Crashpad</div>
+      <div class="brand" id="brand">RentR</div>
       <div class="topbar-right">
         <nav class="nav">
           <a href="lookup.html" id="navFind">Find</a>
@@ -22,6 +22,13 @@
 
     <div class="panel" id="stepDates">
       <h1 id="titleBook">Book</h1>
+      <div class="cal-prompt" id="calPrompt" aria-live="polite">
+        <span class="cal-prompt-step" id="calPromptStep">1</span>
+        <span class="cal-prompt-text">
+          <span class="cal-prompt-title" id="calPromptTitle"></span>
+          <span class="cal-prompt-hint muted" id="calPromptHint"></span>
+        </span>
+      </div>
       <div class="cal-head">
         <button type="button" class="ghost" id="calPrev" aria-label="&#8249;">&#8249;</button>
         <div class="cal-month" id="calMonth"></div>
@@ -32,10 +39,25 @@
         <span><i></i><span id="legFree">Free</span></span>
         <span><i class="taken"></i><span id="legTaken">Booked</span></span>
       </div>
-      <p class="muted" id="daysHint"></p>
-      <p style="margin-top:0.75rem;">
-        <button type="button" class="ghost" id="btnClearDates" hidden>Clear</button>
-      </p>
+      <div class="date-summary" id="dateSummary" hidden>
+        <div class="ds-range">
+          <div class="ds-leg">
+            <span class="ds-leg-label" id="dsStartLabel"></span>
+            <span class="ds-leg-date" id="dsStart"></span>
+          </div>
+          <span class="ds-arrow" aria-hidden="true">&#8594;</span>
+          <div class="ds-leg" id="dsEndLeg">
+            <span class="ds-leg-label" id="dsEndLabel"></span>
+            <span class="ds-leg-date" id="dsEnd"></span>
+          </div>
+          <div class="ds-count"><span class="badge ds-days" id="dsDays" hidden></span></div>
+        </div>
+        <p class="ds-note muted" id="dsNote"></p>
+        <div class="ds-price" id="dsPrice" hidden></div>
+        <p class="ds-actions">
+          <button type="button" class="ghost" id="btnClearDates" hidden>Clear</button>
+        </p>
+      </div>
       <p class="err" id="errDates" hidden></p>
     </div>
 

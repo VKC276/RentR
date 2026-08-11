@@ -49,7 +49,7 @@
 
   function applyI18n() {
     I18n.renderLangSwitcher($('lang'));
-    $('brand').textContent = (state.config && state.config.appName) || I18n.t('appName');
+    $('brand').textContent = I18n.t('appName');
     $('navFind').textContent = I18n.t('find');
     $('titleBook').textContent = I18n.t('book');
     $('legFree').textContent = I18n.t('legendFree');
@@ -68,20 +68,57 @@
     $('thanksTitle').textContent = I18n.t('thanks');
     $('lblBookingNo').textContent = I18n.t('bookingNo');
     renderCalendar();
-    updateDaysHint();
+    updateDateSummary();
     updatePriceBox();
   }
 
   window.onLocaleChange = applyI18n;
 
-  function updateDaysHint() {
-    var hint = $('daysHint');
-    if (!state.startDate) { hint.textContent = I18n.t('pickStart'); return; }
-    if (!state.endDate) { hint.textContent = I18n.t('pickEnd'); return; }
-    var days = Pricing.calcDays(state.startDate, state.endDate);
-    hint.textContent = I18n.t('daysExplain', {
-      start: state.startDate, end: state.endDate, days: days
-    });
+  /** The year only earns its space when the booking is not in the current one. */
+  function fmtDate(date) {
+    var d = parseYmd(date);
+    var opts = { weekday: 'short', day: 'numeric', month: 'short' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return new Intl.DateTimeFormat(locale(), opts).format(d);
+  }
+
+  function dayCount(days) {
+    return days + ' ' + I18n.t(days === 1 ? 'dayUnitOne' : 'dayUnitMany');
+  }
+
+  /** Says what the next click on the calendar will do, and nothing else. */
+  function updateDatePrompt() {
+    var done = !!(state.startDate && state.endDate);
+    var step = state.startDate ? 2 : 1;
+    $('calPrompt').classList.toggle('is-done', done);
+    $('calPromptStep').textContent = done ? '✓' : String(step);
+    $('calPromptStep').setAttribute(
+      'aria-label', done ? I18n.t('datesChosen') : I18n.t('stepOfTwo', { n: step })
+    );
+    $('calPromptTitle').textContent = done
+      ? I18n.t('datesChosen')
+      : I18n.t(state.startDate ? 'pickEnd' : 'pickStart');
+    $('calPromptHint').textContent = I18n.t(done ? 'pickAgainHint' : 'sameDayHint');
+  }
+
+  function updateDateSummary() {
+    updateDatePrompt();
+    var box = $('dateSummary');
+    box.hidden = !state.startDate;
+    if (!state.startDate) { updateSummaryPrice(); return; }
+    $('dsStartLabel').textContent = I18n.t('start');
+    $('dsEndLabel').textContent = I18n.t('end');
+    $('dsStart').textContent = fmtDate(state.startDate);
+    $('dsEnd').textContent = state.endDate ? fmtDate(state.endDate) : I18n.t('endPending');
+    $('dsEndLeg').classList.toggle('is-pending', !state.endDate);
+    $('dsDays').hidden = !state.endDate;
+    if (state.endDate) {
+      $('dsDays').textContent = dayCount(Pricing.calcDays(state.startDate, state.endDate));
+    }
+    $('dsNote').textContent = I18n.t(
+      state.startDate === state.endDate ? 'singleDayNote' : 'fullDaysNote'
+    );
+    updateSummaryPrice();
   }
 
   function showErr(id, msg) {
@@ -97,9 +134,10 @@
     });
   }
 
+  // The product name is the same everywhere, so the brand comes from i18n and
+  // not from the config the API happens to return.
   function useConfig(cfg) {
     state.config = cfg;
-    $('brand').textContent = cfg.appName || I18n.t('appName');
   }
 
   function absorbCalendar(cal) {
@@ -264,7 +302,7 @@
 
     $('btnClearDates').hidden = !state.startDate;
     renderCalendar();
-    updateDaysHint();
+    updateDateSummary();
 
     if (!state.endDate) {
       $('stepPads').hidden = true;
@@ -313,17 +351,47 @@
     });
   }
 
+  function currentPrice() {
+    if (!state.config || !state.startDate || !state.endDate || !state.selected.length) return null;
+    return Pricing.calculatePrice(state.config, state.selected, state.startDate, state.endDate);
+  }
+
+  function priceRow(label, value, cls) {
+    return '<div class="ds-price-row' + (cls ? ' ' + cls : '') + '">' +
+      '<span>' + escapeHtml(label) + '</span>' +
+      '<span class="ds-price-val">' + escapeHtml(value) + '</span></div>';
+  }
+
+  function priceRows(price) {
+    return '<div class="ds-price-list">' +
+      priceRow(I18n.t('base'), price.priceBase + ' ' + price.currency) +
+      (price.priceDiscount
+        ? priceRow(I18n.t('discount'), '−' + price.priceDiscount + ' ' + price.currency, 'is-discount')
+        : '') +
+      priceRow(I18n.t('total'), price.priceTotal + ' ' + price.currency, 'is-total') +
+      '</div>';
+  }
+
+  function updateSummaryPrice() {
+    var box = $('dsPrice');
+    if (!state.startDate || !state.endDate) { box.hidden = true; box.innerHTML = ''; return; }
+    var price = currentPrice();
+    box.hidden = false;
+    box.innerHTML = price
+      ? priceRows(price)
+      : '<p class="ds-pending muted">' + escapeHtml(I18n.t('priceAfterPads')) + '</p>';
+  }
+
   function updatePriceBox() {
-    if (!state.config || !state.startDate || !state.endDate || !state.selected.length) {
-      if ($('priceBox')) $('priceBox').innerHTML = '';
-      return;
-    }
-    var price = Pricing.calculatePrice(state.config, state.selected, state.startDate, state.endDate);
-    $('priceBox').innerHTML =
-      '<div class="muted">' + escapeHtml(I18n.t('daysExplain', { start: state.startDate, end: state.endDate, days: price.days })) + '</div>' +
-      '<div>' + I18n.t('base') + ': ' + price.priceBase + ' ' + price.currency + '</div>' +
-      (price.priceDiscount ? '<div>' + I18n.t('discount') + ': −' + price.priceDiscount + ' ' + price.currency + '</div>' : '') +
-      '<div><strong>' + I18n.t('total') + ': ' + price.priceTotal + ' ' + price.currency + '</strong></div>';
+    updateSummaryPrice();
+    var box = $('priceBox');
+    if (!box) return;
+    var price = currentPrice();
+    if (!price) { box.innerHTML = ''; return; }
+    box.innerHTML =
+      '<div class="ds-price-head muted">' +
+      escapeHtml(fmtDate(state.startDate) + ' – ' + fmtDate(state.endDate) + ' · ' + dayCount(price.days)) +
+      '</div>' + priceRows(price);
   }
 
   function startTimer(expiresAt) {
@@ -376,7 +444,7 @@
     $('stepPads').hidden = true;
     $('stepForm').hidden = true;
     renderCalendar();
-    updateDaysHint();
+    updateDateSummary();
   });
 
   $('btnHold').addEventListener('click', function () {

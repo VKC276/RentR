@@ -13,12 +13,15 @@
   }
   window.onLocaleChange = applyI18n;
 
+  // The server accepts a cancellation up until the equipment is handed out.
+  var CANCELLABLE = ['Requested', 'Approved', 'ChangePending', 'CancelPending'];
+
   function render() {
     var b = booking;
     var od = b.openDoor || {};
     var html = '';
     html += '<h1>' + I18n.t('bookingNo') + ' ' + escapeHtml(b.bookingNumber) + '</h1>';
-    html += '<p>' + I18n.t('status') + ': <strong>' + escapeHtml(b.status) + '</strong></p>';
+    html += '<p>' + I18n.t('status') + ': <strong>' + escapeHtml(I18n.statusLabel(b.status)) + '</strong></p>';
     html += '<p>' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' + escapeHtml(b.email) + ' · ' + escapeHtml(b.phone) + '</p>';
     html += '<p>' + escapeHtml(I18n.t('daysExplain', { start: b.startDate, end: b.endDate, days: b.days })) + '</p>';
     html += '<p>' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
@@ -31,8 +34,11 @@
       html += '<p style="margin-top:1rem;"><button type="button" class="warn" id="btnConfirm">' + I18n.t('confirmReturn') + '</button></p>';
     }
 
-    if (['Approved', 'Requested'].indexOf(b.status) >= 0) {
-      html += '<p style="margin-top:1rem;"><button type="button" class="ghost" id="btnCancel">' + I18n.t('requestCancel') + '</button></p>';
+    if (CANCELLABLE.indexOf(b.status) >= 0) {
+      html += '<p style="margin-top:1rem;"><button type="button" class="ghost" id="btnCancel">' + I18n.t('cancelBooking') + '</button></p>';
+    }
+    if (b.status === 'Cancelled') {
+      html += '<p class="ok">' + I18n.t('cancelDone') + '</p>';
     }
 
     $('content').innerHTML = html;
@@ -62,7 +68,7 @@
     var btnCancel = $('btnCancel');
     if (btnCancel) {
       btnCancel.onclick = function () {
-        if (!confirm(I18n.t('requestCancel') + '?')) return;
+        if (!confirm(I18n.t('confirmCancel'))) return;
         Status.button(btnCancel, I18n.t('busyCancel'), Api.call('guestRequestCancel', { magicToken: token, t: token }))
           .then(function (res) {
             booking = res.booking;

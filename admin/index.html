@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="/RentR/" />
-  <title>Admin — Crashpad</title>
+  <title>RentR — Admin</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div class="brand">Admin</div>
+      <div class="brand">RentR Admin</div>
       <nav class="nav" id="nav" hidden>
         <a href="#bookings">Bokningar</a>
         <a href="#doorpass">Dörrlänk</a>
@@ -23,8 +23,8 @@
     <div class="panel" id="loginPanel">
       <h1>Logga in</h1>
       <div class="row">
-        <div><label>E-post</label><input id="email" type="email" value="admin@example.com" /></div>
-        <div><label>Lösenord</label><input id="password" type="password" value="Admin123!" /></div>
+        <div><label>E-post</label><input id="email" type="email" autocomplete="username" /></div>
+        <div><label>Lösenord</label><input id="password" type="password" autocomplete="current-password" /></div>
       </div>
       <p style="margin-top:1rem;"><button type="button" id="btnLogin">Logga in</button></p>
       <p class="err" id="loginErr" hidden></p>
@@ -36,16 +36,10 @@
         <div class="row">
           <div><label>Sök bokningsnummer</label><input id="searchNo" placeholder="2026-00001" /></div>
           <div><label>Status</label>
+            <!-- The statuses are filled in from STATUS_LABELS in admin.js: the
+                 value stays the English key the server filters on. -->
             <select id="filterStatus">
               <option value="">Alla</option>
-              <option>Requested</option>
-              <option>Approved</option>
-              <option>ChangePending</option>
-              <option>CancelPending</option>
-              <option>HandedOut</option>
-              <option>Returned</option>
-              <option>Cancelled</option>
-              <option>Rejected</option>
             </select>
           </div>
         </div>
@@ -82,7 +76,7 @@
 
       <div class="panel" id="pricingSection">
         <h2>Priser & rabatter</h2>
-        <h3>Crashpads</h3>
+        <h3>Utrustning</h3>
         <div id="padsList"></div>
         <h3>Rabattstege</h3>
         <div id="rulesList"></div>

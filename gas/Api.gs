@@ -87,7 +87,7 @@ function route_(action, body, sessionToken, e) {
     case 'guestRequestChange':
       return guestRequestChange_(body.magicToken || body.t, body);
     case 'guestRequestCancel':
-      return guestRequestCancel_(body.magicToken || body.t);
+      return guestCancelBooking_(body.magicToken || body.t);
     case 'openDoor':
       return openDoor_(body.magicToken || body.t);
     case 'confirmReturn':

@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="/RentR/" />
-  <title>Find booking</title>
+  <title>RentR — Find booking</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div class="brand"><a href="index.html" id="brand">Crashpad</a></div>
+      <div class="brand"><a href="index.html" id="brand">RentR</a></div>
       <div id="lang"></div>
     </div>
     <div class="panel">
@@ -49,7 +49,7 @@
         var b = res.booking;
         var box = document.getElementById('result');
         box.hidden = false;
-        box.innerHTML = '<p><strong>' + b.bookingNumber + '</strong> — ' + b.status + '</p>' +
+        box.innerHTML = '<p><strong>' + b.bookingNumber + '</strong> — ' + I18n.statusLabel(b.status) + '</p>' +
           '<p>' + b.startDate + ' – ' + b.endDate + ' (' + b.days + ')</p>' +
           '<p><a href="' + (res.manageUrl || ('booking.html?t=' + encodeURIComponent(res.magicToken))) + '">' + I18n.t('manage') + '</a></p>';
       }).catch(function (e) {

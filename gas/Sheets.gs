@@ -203,7 +203,7 @@ function seedIfEmpty_() {
   if (!config.currency) setConfig_('currency', 'SEK');
   if (!config.doorCommandTtlSec) setConfig_('doorCommandTtlSec', '30');
   if (!config.relayPulseMs) setConfig_('relayPulseMs', '1000');
-  if (!config.appName) setConfig_('appName', 'Crashpad Booking');
+  if (!config.appName) setConfig_('appName', APP_NAME);
   if (!config.timezone) setConfig_('timezone', 'Europe/Stockholm');
   if (!config.pagesBaseUrl) setConfig_('pagesBaseUrl', 'http://ledinfo.vastervikclimbing.se/RentR');
   if (!config.sessionHours && config.sessionHours !== '0') setConfig_('sessionHours', '0');
