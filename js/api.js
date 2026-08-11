@@ -199,6 +199,8 @@
   }
 
   function call(action, payload, sessionToken) {
+    // 'action', 'requestId' and 'sessionToken' are reserved; a payload must not
+    // use those names or its value is silently replaced here.
     var body = Object.assign({}, payload || {}, { action: action, requestId: newRequestId() });
     if (sessionToken) body.sessionToken = sessionToken;
 

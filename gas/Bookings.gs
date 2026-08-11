@@ -306,7 +306,7 @@ function adminUpdateBooking_(bookingId, payload, actor) {
   var b = findById_(SHEET_NAMES.Bookings, bookingId);
   if (!b) throw softError_('Bokning saknas', 404);
   var patch = { updatedAt: nowIso_() };
-  var action = payload.action;
+  var action = payload.op;
 
   if (action === 'approve') {
     if (b.status === 'Requested' || b.status === 'ChangePending') {

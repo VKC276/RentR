@@ -160,8 +160,10 @@
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
 
-    function act(action, extra) {
-      var payload = Object.assign({ action: action, bookingId: b.id }, extra || {});
+    // 'op', not 'action': Api.call reserves 'action' for the route name and
+    // would overwrite it, leaving the server with nothing to dispatch on.
+    function act(op, extra) {
+      var payload = Object.assign({ op: op, bookingId: b.id }, extra || {});
       api('adminUpdateBooking', payload).then(function () {
         return loadBookings();
       }).then(function () {
