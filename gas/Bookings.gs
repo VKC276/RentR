@@ -57,12 +57,26 @@ function logEvent_(bookingId, type, actor, detail) {
   });
 }
 
-function enrichBooking_(b) {
-  if (!b) return null;
-  var padIds = getBookingPads_(b.id);
-  var pads = readAllObjects_(SHEET_NAMES.Pads);
+/**
+ * Lookups shared by a whole list of bookings. Building them per booking meant
+ * copying the BookingPads and Pads tables once for every row.
+ */
+function bookingIndex_() {
+  var padsByBooking = {};
+  readAllObjects_(SHEET_NAMES.BookingPads).forEach(function (bp) {
+    var list = padsByBooking[bp.bookingId] || (padsByBooking[bp.bookingId] = []);
+    list.push(bp.padId);
+  });
   var padMap = {};
-  pads.forEach(function (p) { padMap[p.id] = p; });
+  readAllObjects_(SHEET_NAMES.Pads).forEach(function (p) { padMap[p.id] = p; });
+  return { padsByBooking: padsByBooking, padMap: padMap };
+}
+
+function enrichBooking_(b, index) {
+  if (!b) return null;
+  index = index || bookingIndex_();
+  var padIds = index.padsByBooking[b.id] || [];
+  var padMap = index.padMap;
   var priceTotal = b.priceOverride !== '' && b.priceOverride !== null && typeof b.priceOverride !== 'undefined' && String(b.priceOverride) !== ''
     ? Number(b.priceOverride)
     : Number(b.priceTotal);
@@ -286,20 +300,46 @@ function guestRequestCancel_(token) {
 }
 
 function listBookingsAdmin_(query) {
-  var list = readAllObjects_(SHEET_NAMES.Bookings).map(enrichBooking_);
-  if (query && query.bookingNumber) {
-    var q = String(query.bookingNumber).trim().toLowerCase();
-    list = list.filter(function (b) {
-      return String(b.bookingNumber).toLowerCase().indexOf(q) >= 0;
+  var rows = readAllObjects_(SHEET_NAMES.Bookings);
+  var number = query && query.bookingNumber ? String(query.bookingNumber).trim().toLowerCase() : '';
+  var status = query && query.status ? String(query.status) : '';
+
+  // Filter first: resolving pads and door flags for rows that are about to be
+  // discarded is most of the work on a filtered view.
+  if (number) {
+    rows = rows.filter(function (b) {
+      return String(b.bookingNumber).toLowerCase().indexOf(number) >= 0;
     });
   }
-  if (query && query.status) {
-    list = list.filter(function (b) { return b.status === query.status; });
+  if (status) {
+    rows = rows.filter(function (b) { return b.status === status; });
   }
-  list.sort(function (a, b) {
+  rows.sort(function (a, b) {
     return String(b.createdAt).localeCompare(String(a.createdAt));
   });
-  return list;
+
+  var index = bookingIndex_();
+  return rows.map(function (b) { return enrichBooking_(b, index); });
+}
+
+/**
+ * The whole admin page in one cached answer. Every admin sees the same data and
+ * every write bumps the data version, so the cache clears itself the moment a
+ * booking changes; the filter is part of the key.
+ */
+function adminOverview_(query) {
+  var key = 'adminOverview_' +
+    ((query && query.bookingNumber) || '') + '_' +
+    ((query && query.status) || '');
+  return cachedResult_(key, function () {
+    return {
+      bookings: listBookingsAdmin_(query),
+      pads: listPadsAdmin_(),
+      rules: listPricingRulesAdmin_(),
+      users: listUsers_(),
+      passes: listDoorPasses_()
+    };
+  });
 }
 
 function adminUpdateBooking_(bookingId, payload, actor) {

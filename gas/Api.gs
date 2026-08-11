@@ -115,13 +115,7 @@ function route_(action, body, sessionToken, e) {
       return { bookings: listBookingsAdmin_(body) };
     case 'adminOverview':
       requireAdmin_(sessionToken);
-      return {
-        bookings: listBookingsAdmin_(body),
-        pads: listPadsAdmin_(),
-        rules: listPricingRulesAdmin_(),
-        users: listUsers_(),
-        passes: listDoorPasses_()
-      };
+      return adminOverview_(body);
     case 'adminUpdateBooking':
       return adminUpdateBooking_(body.bookingId, body, requireAdmin_(sessionToken));
     case 'availablePadsForBooking':

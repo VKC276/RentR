@@ -248,8 +248,15 @@ function nowIso_() {
   return new Date().toISOString();
 }
 
+var todayCache_ = null;
+
+// Called once per booking while enriching a list, and formatDate is a bridged
+// call, so today is resolved once per request.
 function todayYmd_() {
-  return Utilities.formatDate(new Date(), 'Europe/Stockholm', 'yyyy-MM-dd');
+  if (!todayCache_) {
+    todayCache_ = Utilities.formatDate(new Date(), 'Europe/Stockholm', 'yyyy-MM-dd');
+  }
+  return todayCache_;
 }
 
 function randomHex_(bytes) {
@@ -295,9 +302,9 @@ function setConfig_(key, value) {
 }
 
 /**
- * Rows are memoised for the duration of one request. Without this, helpers such
- * as enrichBooking_ re-read the Pads and BookingPads tabs once per booking,
- * turning the admin list into dozens of Sheets round trips.
+ * Rows are memoised for the duration of one request. A single API call touches
+ * the same tabs from several helpers, and without this each one would be its
+ * own Sheets round trip.
  *
  * Callers get fresh shallow copies, so mutating a returned row cannot leak into
  * later reads. Every write helper must call invalidateTable_.
