@@ -4,8 +4,29 @@
   var selectedId = null;
 
   function $(id) { return document.getElementById(id); }
+
+  var BUSY = {
+    login: 'Loggar in…',
+    logout: 'Loggar ut…',
+    me: 'Kontrollerar inloggning…',
+    listBookings: 'Hämtar bokningar…',
+    adminUpdateBooking: 'Sparar bokningen…',
+    availablePadsForBooking: 'Kontrollerar lediga crashpads…',
+    listPads: 'Hämtar crashpads…',
+    updatePad: 'Sparar pris…',
+    listPricingRules: 'Hämtar rabattregler…',
+    savePricingRule: 'Sparar rabattregel…',
+    deletePricingRule: 'Tar bort rabattregel…',
+    listUsers: 'Hämtar användare…',
+    createUser: 'Skapar användare…',
+    deleteUser: 'Tar bort användare…',
+    listDoorPasses: 'Hämtar dörrlänkar…',
+    createDoorPass: 'Skickar dörrlänk…',
+    revokeDoorPass: 'Spärrar dörrlänk…'
+  };
+
   function api(action, payload) {
-    return Api.call(action, payload || {}, session);
+    return Status.during(BUSY[action] || 'Arbetar…', Api.call(action, payload || {}, session));
   }
 
   function showLogin(show) {
@@ -24,7 +45,7 @@
 
   $('btnLogin').onclick = function () {
     $('loginErr').hidden = true;
-    Api.call('login', {
+    api('login', {
       email: $('email').value.trim(),
       password: $('password').value
     }).then(function (res) {

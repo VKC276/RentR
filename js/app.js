@@ -90,7 +90,7 @@
    */
   function ensureConfig() {
     if (state.config) return Promise.resolve(state.config);
-    return Api.loadPublicConfig().then(function (cfg) {
+    return Status.during(I18n.t('busyConfig'), Api.loadPublicConfig()).then(function (cfg) {
       state.config = cfg;
       $('brand').textContent = cfg.appName || I18n.t('appName');
       return cfg;
@@ -144,7 +144,10 @@
     state.endDate = e;
     $('btnCheck').disabled = true;
     ensureConfig().then(function () {
-      return Api.call('getAvailability', { startDate: s, endDate: e });
+      return Status.during(
+        I18n.t('busyAvailability'),
+        Api.call('getAvailability', { startDate: s, endDate: e })
+      );
     }).then(function (res) {
       $('btnCheck').disabled = false;
       $('stepPads').hidden = false;
@@ -165,15 +168,15 @@
     var prev = state.hold;
     state.hold = null;
     var released = prev
-      ? Api.call('releaseHold', { holdToken: prev.holdToken }).catch(function () {})
+      ? Status.during(I18n.t('busyRelease'), Api.call('releaseHold', { holdToken: prev.holdToken })).catch(function () {})
       : Promise.resolve();
 
     released.then(function () {
-      return Api.call('createHold', {
+      return Status.during(I18n.t('busyHold'), Api.call('createHold', {
         padIds: state.selected,
         startDate: state.startDate,
         endDate: state.endDate
-      });
+      }));
     }).then(function (hold) {
       state.hold = hold;
       $('stepForm').hidden = false;
@@ -190,7 +193,8 @@
 
   $('btnCancelHold').addEventListener('click', function () {
     if (state.hold) {
-      Api.call('releaseHold', { holdToken: state.hold.holdToken }).catch(function () {});
+      Status.during(I18n.t('busyRelease'), Api.call('releaseHold', { holdToken: state.hold.holdToken }))
+        .catch(function () {});
     }
     state.hold = null;
     $('stepForm').hidden = true;
@@ -214,7 +218,7 @@
       return;
     }
     $('btnSubmit').disabled = true;
-    Api.call('submitBooking', payload).then(function (res) {
+    Status.during(I18n.t('busySubmit'), Api.call('submitBooking', payload)).then(function (res) {
       if (state.timerId) clearInterval(state.timerId);
       $('stepDates').hidden = true;
       $('stepPads').hidden = true;

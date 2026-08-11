@@ -43,7 +43,7 @@
     if (btnDoor) {
       btnDoor.onclick = function () {
         btnDoor.disabled = true;
-        Api.call('openDoor', { magicToken: token, t: token }).then(function (res) {
+        Status.during(I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token })).then(function (res) {
           booking = res.booking;
           render();
         }).catch(function (e) {
@@ -56,7 +56,7 @@
     if (btnConfirm) {
       btnConfirm.onclick = function () {
         btnConfirm.disabled = true;
-        Api.call('confirmReturn', { magicToken: token, t: token }).then(function (res) {
+        Status.during(I18n.t('busyReturn'), Api.call('confirmReturn', { magicToken: token, t: token })).then(function (res) {
           booking = res.booking;
           render();
         }).catch(function (e) {
@@ -69,7 +69,7 @@
     if (btnCancel) {
       btnCancel.onclick = function () {
         if (!confirm(I18n.t('requestCancel') + '?')) return;
-        Api.call('guestRequestCancel', { magicToken: token, t: token }).then(function (res) {
+        Status.during(I18n.t('busyCancel'), Api.call('guestRequestCancel', { magicToken: token, t: token })).then(function (res) {
           booking = res.booking;
           render();
         }).catch(function (e) { showErr(e.message); });
@@ -94,7 +94,7 @@
     showErr(I18n.t('error'));
     return;
   }
-  Api.call('getBookingByToken', { magicToken: token, t: token }).then(function (res) {
+  Status.during(I18n.t('busyBooking'), Api.call('getBookingByToken', { magicToken: token, t: token })).then(function (res) {
     booking = res.booking;
     render();
   }).catch(function (e) {

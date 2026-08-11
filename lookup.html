@@ -27,6 +27,7 @@
   <script src="js/config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/status.js"></script>
   <script>
     function apply() {
       I18n.renderLangSwitcher(document.getElementById('lang'));
@@ -41,10 +42,10 @@
     document.getElementById('btn').onclick = function () {
       var err = document.getElementById('err');
       err.hidden = true;
-      Api.call('lookupBooking', {
+      Status.during(I18n.t('busyLookup'), Api.call('lookupBooking', {
         bookingNumber: document.getElementById('bookingNumber').value.trim(),
         email: document.getElementById('email').value.trim()
-      }).then(function (res) {
+      })).then(function (res) {
         var b = res.booking;
         var box = document.getElementById('result');
         box.hidden = false;

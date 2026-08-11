@@ -40,7 +40,19 @@
       doorValid: 'Giltig',
       doorValidHint: 'Start- och slutdatum räknas som hela dygn. Sidan visar endast Open door.',
       doorNotValidToday: 'Open door är inte tillgänglig idag (utanför giltighetsperioden).',
-      doorOpened: 'Dörrkommando skickat'
+      doorOpened: 'Dörrkommando skickat',
+      busyConfig: 'Hämtar priser och crashpads…',
+      busyAvailability: 'Kontrollerar bokningar…',
+      busyHold: 'Reserverar crashpads…',
+      busyRelease: 'Släpper reservationen…',
+      busySubmit: 'Skickar din förfrågan…',
+      busyLookup: 'Söker din bokning…',
+      busyBooking: 'Hämtar bokningen…',
+      busyChange: 'Skickar ändringsförfrågan…',
+      busyCancel: 'Skickar avbokning…',
+      busyDoor: 'Öppnar dörren…',
+      busyReturn: 'Registrerar återlämning…',
+      busyRetry: 'Google svarade inte — försöker igen…'
     },
     en: {
       appName: 'Crashpad booking',
@@ -82,7 +94,19 @@
       doorValid: 'Valid',
       doorValidHint: 'Start and end dates each count as a full day. This page only shows Open door.',
       doorNotValidToday: 'Open door is not available today (outside the validity period).',
-      doorOpened: 'Door command sent'
+      doorOpened: 'Door command sent',
+      busyConfig: 'Loading prices and crashpads…',
+      busyAvailability: 'Checking bookings…',
+      busyHold: 'Reserving crashpads…',
+      busyRelease: 'Releasing the reservation…',
+      busySubmit: 'Sending your request…',
+      busyLookup: 'Searching for your booking…',
+      busyBooking: 'Loading the booking…',
+      busyChange: 'Sending change request…',
+      busyCancel: 'Sending cancellation…',
+      busyDoor: 'Opening the door…',
+      busyReturn: 'Registering the return…',
+      busyRetry: 'Google did not respond — retrying…'
     },
     de: {
       appName: 'Crashpad-Buchung',
@@ -124,7 +148,19 @@
       doorValid: 'Gültig',
       doorValidHint: 'Start- und Enddatum zählen als volle Tage. Diese Seite zeigt nur Open door.',
       doorNotValidToday: 'Open door ist heute nicht verfügbar (außerhalb der Gültigkeit).',
-      doorOpened: 'Türbefehl gesendet'
+      doorOpened: 'Türbefehl gesendet',
+      busyConfig: 'Preise und Crashpads werden geladen…',
+      busyAvailability: 'Buchungen werden geprüft…',
+      busyHold: 'Crashpads werden reserviert…',
+      busyRelease: 'Reservierung wird freigegeben…',
+      busySubmit: 'Ihre Anfrage wird gesendet…',
+      busyLookup: 'Ihre Buchung wird gesucht…',
+      busyBooking: 'Buchung wird geladen…',
+      busyChange: 'Änderungsanfrage wird gesendet…',
+      busyCancel: 'Stornierung wird gesendet…',
+      busyDoor: 'Tür wird geöffnet…',
+      busyReturn: 'Rückgabe wird erfasst…',
+      busyRetry: 'Google hat nicht geantwortet — neuer Versuch…'
     }
   };
 

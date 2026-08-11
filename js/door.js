@@ -43,7 +43,7 @@
         btn.disabled = true;
         $('ok').hidden = true;
         $('err').hidden = true;
-        Api.call('openDoor', { magicToken: token, t: token }).then(function () {
+        Status.during(I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token })).then(function () {
           $('ok').hidden = false;
           $('ok').textContent = I18n.t('doorOpened');
           btn.disabled = false;
@@ -64,7 +64,7 @@
     return;
   }
 
-  Api.call('getDoorPass', { magicToken: token, t: token }).then(function (res) {
+  Status.during(I18n.t('busyBooking'), Api.call('getDoorPass', { magicToken: token, t: token })).then(function (res) {
     pass = res.pass;
     render();
   }).catch(function (e) {

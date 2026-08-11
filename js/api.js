@@ -171,6 +171,9 @@
     if (typeof left !== 'number') left = RETRIES;
     return SENDERS[name](body).catch(function (e) {
       if (!e || !e.retryable || left <= 1) throw e;
+      if (typeof api.onRetry === 'function') {
+        try { api.onRetry(body.action, RETRIES - left + 1); } catch (hookErr) { /* ignore */ }
+      }
       return delay(700).then(function () {
         return sendRetrying(name, body, left - 1);
       });
@@ -266,9 +269,13 @@
     });
   }
 
-  global.Api = {
+  // onRetry is assigned by the UI to report transient Google failures.
+  var api = {
     call: call,
     loadPublicConfig: loadPublicConfig,
-    getCachedConfig: getCachedConfig
+    getCachedConfig: getCachedConfig,
+    onRetry: null
   };
+
+  global.Api = api;
 })(window);
