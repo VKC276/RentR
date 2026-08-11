@@ -52,7 +52,9 @@ Live: **http://ledinfo.vastervikclimbing.se/RentR/**
 3. Pages: deploy from branch `main`, folder **`/` (root)**.
 4. Open the site and book a test period.
 
-API calls use JSONP (GET + `callback`) so the browser can talk to Apps Script without CORS.
+API calls go through a GAS **iframe bridge** (`?bridge=1` + `google.script.run`) because
+`/exec` always redirects to `script.googleusercontent.com` (expected). JSONP with
+`referrerPolicy=no-referrer` is the fallback — both tolerate that redirect.
 
 ## 3. Raspberry Pi
 

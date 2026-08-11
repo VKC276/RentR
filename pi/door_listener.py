@@ -33,10 +33,13 @@ POLL_SEC = float(os.environ.get("POLL_SEC", "2.5"))
 
 
 def gas_get(action: str, **params):
+    """GET /exec — follows Google's security redirect to googleusercontent.com."""
     q = {"action": action, "apiKey": API_KEY}
     q.update({k: v for k, v in params.items() if v is not None})
     url = GAS_URL + "?" + urllib.parse.urlencode(q)
-    with urllib.request.urlopen(url, timeout=30) as resp:
+    req = urllib.request.Request(url, headers={"User-Agent": "RentR-Pi/1.0"})
+    # urlopen follows redirects by default (script.google.com → googleusercontent.com)
+    with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
