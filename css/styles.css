@@ -17,6 +17,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Class-level display rules outrank the UA rule for [hidden], and the whole app
+   toggles visibility through that attribute. */
+[hidden] { display: none !important; }
 html, body {
   margin: 0;
   padding: 0;
@@ -233,6 +236,113 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-weight: 700;
   color: var(--accent2);
 }
+/* Bookings are rows of buttons rather than a table: the whole row is the tap
+   target, so nothing has to be scrolled into reach on a narrow screen. */
+.booking-list { display: grid; gap: 0.5rem; }
+.booking-row {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr) 11.5rem 8rem 8rem;
+  grid-template-areas: "no guest period status price";
+  gap: 0.35rem 1rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.booking-row:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(26, 43, 51, 0.09); }
+.booking-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.booking-row .b-no { grid-area: no; font-weight: 700; font-variant-numeric: tabular-nums; }
+.booking-row .b-guest { grid-area: guest; min-width: 0; }
+.booking-row .b-period { grid-area: period; white-space: nowrap; }
+.booking-row .b-status { grid-area: status; }
+.booking-row .b-price { grid-area: price; text-align: right; }
+.booking-row .sub {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .booking-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "no status"
+      "guest price"
+      "period period";
+  }
+  .booking-row .b-status { text-align: right; }
+  .booking-row .b-period { color: var(--muted); font-size: 0.85rem; }
+}
+
+/* The detail used to open in a panel further down the page, which was easy to
+   miss entirely on a phone. */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.modal-backdrop { position: absolute; inset: 0; background: rgba(16, 28, 34, 0.55); }
+.modal-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(46rem, 100%);
+  max-height: 85vh;
+  padding: 1.1rem 1.25rem 1.25rem;
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(16, 28, 34, 0.35);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.modal-head h2 { margin: 0; }
+.modal-body { overflow-y: auto; }
+/* Buttons size to their text here; the generic .row stretches its children,
+   which pushed the action buttons onto separate lines. */
+.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.9rem; }
+.actions > button { flex: 0 0 auto; }
+.check-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; margin-top: 0.5rem; }
+label.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+label.check input { width: auto; margin: 0; }
+button.icon { padding: 0.4rem 0.6rem; line-height: 1; }
+body.modal-open { overflow: hidden; }
+@media (max-width: 640px) {
+  .actions > button { flex: 1 1 8rem; min-height: 2.75rem; }
+  .modal { padding: 0; align-items: flex-end; }
+  .modal-card {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+}
+
+.table-scroll { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 .table th, .table td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); }
 .badge {
@@ -263,7 +373,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.18s ease, transform 0.18s ease;
-  z-index: 50;
+  /* Above .modal, or a dialog would hide the only progress feedback there is. */
+  z-index: 60;
 }
 .status-bar.is-visible {
   opacity: 1;
@@ -304,7 +415,19 @@ button.ghost.is-busy .status-spinner {
 
 .err { color: #a32020; margin: 0.5rem 0; }
 .ok { color: var(--ok); }
-.nav a { margin-right: 0.75rem; }
+/* .row would give these a 180px flex basis and squeeze them into a column. */
+.topbar-right { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.nav { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.nav a {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.nav a:hover { background: #fff; }
 @media (max-width: 640px) {
   .brand { font-size: 1.25rem; }
 }

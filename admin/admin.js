@@ -33,6 +33,7 @@
   }
 
   function showLogin(show) {
+    if (show) closeDetail();
     $('loginPanel').hidden = !show;
     $('app').hidden = show;
     $('nav').hidden = show;
@@ -104,41 +105,57 @@
 
   function renderBookings(list) {
     bookings = list;
-    var tb = $('bookingsTable').querySelector('tbody');
-    tb.innerHTML = '';
-    bookings.forEach(function (b) {
-      var tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td>' + b.bookingNumber + '</td>' +
-        '<td>' + escapeHtml(b.firstName + ' ' + b.lastName) + '<div class="muted">' + escapeHtml(b.email) + '</div></td>' +
-        '<td>' + b.startDate + ' – ' + b.endDate + '<div class="muted">' + b.days + ' dygn</div></td>' +
-        '<td>' + b.status + '</td>' +
-        '<td>' + b.priceTotal + ' SEK</td>' +
-        '<td><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' + (b.paid ? 'Betald' : 'Obetald') + '</span></td>' +
-        '<td><button type="button" class="secondary" data-id="' + b.id + '">Öppna</button></td>';
-      tb.appendChild(tr);
-    });
-    tb.querySelectorAll('button[data-id]').forEach(function (btn) {
-      btn.onclick = function () { openDetail(btn.getAttribute('data-id')); };
+    var wrap = $('bookingsList');
+    wrap.innerHTML = bookings.map(function (b) {
+      return '<button type="button" class="booking-row" data-id="' + b.id + '">' +
+        '<span class="b-no">' + escapeHtml(b.bookingNumber) + '</span>' +
+        '<span class="b-guest">' + escapeHtml(b.firstName + ' ' + b.lastName) +
+          '<span class="sub">' + escapeHtml(b.email) + '</span></span>' +
+        '<span class="b-period">' + b.startDate + ' – ' + b.endDate +
+          '<span class="sub">' + b.days + ' dygn</span></span>' +
+        '<span class="b-status"><span class="badge">' + escapeHtml(b.status) + '</span></span>' +
+        '<span class="b-price">' + b.priceTotal + ' SEK' +
+          '<span class="sub"><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' +
+          (b.paid ? 'Betald' : 'Obetald') + '</span></span></span>' +
+        '</button>';
+    }).join('');
+    $('bookingsEmpty').hidden = bookings.length > 0;
+    wrap.querySelectorAll('.booking-row').forEach(function (row) {
+      row.onclick = function () { openDetail(row.getAttribute('data-id')); };
     });
   }
+
+  function closeDetail() {
+    selectedId = null;
+    $('detailModal').hidden = true;
+    document.body.classList.remove('modal-open');
+  }
+
+  document.querySelectorAll('[data-close-detail]').forEach(function (el) {
+    el.onclick = closeDetail;
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !$('detailModal').hidden) closeDetail();
+  });
 
   function openDetail(id) {
     selectedId = id;
     var b = bookings.filter(function (x) { return x.id === id; })[0];
     if (!b) return;
-    $('detailPanel').hidden = false;
+    $('detailModal').hidden = false;
+    document.body.classList.add('modal-open');
+    $('detailTitle').textContent = b.bookingNumber;
     var html = '';
     html += '<p><strong>' + b.bookingNumber + '</strong> — ' + b.status + '</p>';
     html += '<p>' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' + escapeHtml(b.phone) + ' · ' + escapeHtml(b.email) + '</p>';
     html += '<p>Pads: ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
     html += '<p>' + b.startDate + ' – ' + b.endDate + ' (' + b.days + ' dygn inkl.)</p>';
     html += '<p>Summa: <strong>' + b.priceTotal + ' SEK</strong></p>';
-    html += '<div class="row">';
-    html += '<label><input type="checkbox" id="flagPickup"' + (b.allowSelfPickup ? ' checked' : '') + '> Tillåt egen hämtning</label>';
-    html += '<label><input type="checkbox" id="flagReturn"' + (b.allowSelfReturn ? ' checked' : '') + '> Tillåt egen återlämning</label>';
+    html += '<div class="check-row">';
+    html += '<label class="check"><input type="checkbox" id="flagPickup"' + (b.allowSelfPickup ? ' checked' : '') + '> Tillåt egen hämtning</label>';
+    html += '<label class="check"><input type="checkbox" id="flagReturn"' + (b.allowSelfReturn ? ' checked' : '') + '> Tillåt egen återlämning</label>';
     html += '</div>';
-    html += '<p style="margin-top:0.75rem;" class="row">';
+    html += '<div class="actions">';
     if (b.status === 'Requested' || b.status === 'ChangePending') {
       html += '<button type="button" id="actApprove">Godkänn</button>';
       html += '<button type="button" class="ghost" id="actReject">Avslå</button>';
@@ -162,9 +179,9 @@
 
     // 'op', not 'action': Api.call reserves 'action' for the route name and
     // would overwrite it, leaving the server with nothing to dispatch on.
-    function act(op, extra) {
+    function act(op, extra, btn) {
       var payload = Object.assign({ op: op, bookingId: b.id }, extra || {});
-      api('adminUpdateBooking', payload).then(function () {
+      api('adminUpdateBooking', payload, btn).then(function () {
         return loadBookings();
       }).then(function () {
         openDetail(b.id);
@@ -174,24 +191,35 @@
       });
     }
 
-    if ($('actApprove')) $('actApprove').onclick = function () { act('approve'); };
-    if ($('actReject')) $('actReject').onclick = function () { act('reject'); };
-    if ($('actApproveCancel')) $('actApproveCancel').onclick = function () { act('approveCancel'); };
-    if ($('actKeep')) $('actKeep').onclick = function () { act('approve'); };
-    if ($('actReturn')) $('actReturn').onclick = function () { act('return'); };
-    if ($('actPaid')) $('actPaid').onclick = function () { act('setPaid', { paid: !b.paid }); };
-    if ($('actFlags')) $('actFlags').onclick = function () {
-      act('setFlags', {
+    /** The button reports its own progress, which the status banner cannot do
+     *  from behind the dialog. `extra` is read on click so it sees current
+     *  checkbox values. */
+    function onAct(id, op, extra) {
+      var btn = $(id);
+      if (!btn) return;
+      btn.onclick = function () {
+        act(op, typeof extra === 'function' ? extra() : extra, btn);
+      };
+    }
+
+    onAct('actApprove', 'approve');
+    onAct('actReject', 'reject');
+    onAct('actApproveCancel', 'approveCancel');
+    onAct('actKeep', 'approve');
+    onAct('actReturn', 'return');
+    onAct('actPaid', 'setPaid', { paid: !b.paid });
+    onAct('actFlags', 'setFlags', function () {
+      return {
         allowSelfPickup: $('flagPickup').checked,
         allowSelfReturn: $('flagReturn').checked
-      });
-    };
+      };
+    });
     if ($('actHandOut')) {
       $('actHandOut').onclick = function () {
         var box = $('handOutBox');
         box.hidden = false;
         box.innerHTML = '<p><strong>Lämna ut</strong></p><p id="hoPads">Laddar lediga pads…</p>';
-        api('availablePadsForBooking', { bookingId: b.id }).then(function (res) {
+        api('availablePadsForBooking', { bookingId: b.id }, $('actHandOut')).then(function (res) {
           var pads = res.pads || [];
           var opts = pads.map(function (p) {
             var sel = (b.padIds || [])[0] === p.id ? ' selected' : '';
@@ -201,26 +229,22 @@
             '<p>Detaljer: ' + escapeHtml(b.firstName + ' ' + b.lastName) + ', ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) +
             ', ' + b.startDate + '–' + b.endDate + '</p>' +
             '<label>Crashpad</label><select id="hoSelect">' + opts + '</select>' +
-            '<p style="margin-top:0.75rem;"><button type="button" id="hoOk">OK</button> ' +
-            '<button type="button" class="ghost" id="hoChange">Ändra & lämna ut</button></p>';
-          $('hoOk').onclick = function () {
-            act('handOut', { padId: $('hoSelect').value });
-          };
-          $('hoChange').onclick = function () {
-            act('handOut', { padId: $('hoSelect').value });
-          };
+            '<div class="actions"><button type="button" id="hoOk">OK</button>' +
+            '<button type="button" class="ghost" id="hoChange">Ändra &amp; lämna ut</button></div>';
+          onAct('hoOk', 'handOut', function () { return { padId: $('hoSelect').value }; });
+          onAct('hoChange', 'handOut', function () { return { padId: $('hoSelect').value }; });
         });
       };
     }
   }
 
   function renderPads(pads) {
-    var html = '<table class="table"><thead><tr><th>Namn</th><th>Pris/dygn</th><th></th></tr></thead><tbody>';
+    var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Namn</th><th>Pris/dygn</th><th></th></tr></thead><tbody>';
     pads.forEach(function (p) {
       html += '<tr><td>' + escapeHtml(p.name) + '</td><td><input data-pad="' + p.id + '" type="number" value="' + p.pricePerDay + '" style="max-width:120px" /></td>' +
         '<td><button type="button" class="secondary" data-save-pad="' + p.id + '">Spara</button></td></tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     $('padsList').innerHTML = html;
     $('padsList').querySelectorAll('[data-save-pad]').forEach(function (btn) {
       btn.onclick = function () {
@@ -232,12 +256,12 @@
   }
 
   function renderRules(rules) {
-    var html = '<table class="table"><thead><tr><th>Dim</th><th>Min</th><th>%</th><th>Label</th><th></th></tr></thead><tbody>';
+    var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Dim</th><th>Min</th><th>%</th><th>Label</th><th></th></tr></thead><tbody>';
     rules.forEach(function (r) {
       html += '<tr><td>' + r.dimension + '</td><td>' + r.minValue + '</td><td>' + r.percentOff + '</td><td>' + escapeHtml(r.label) +
         '</td><td><button type="button" class="ghost" data-del-rule="' + r.id + '">Ta bort</button></td></tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     $('rulesList').innerHTML = html;
     $('rulesList').querySelectorAll('[data-del-rule]').forEach(function (btn) {
       btn.onclick = function () {
@@ -257,12 +281,12 @@
   };
 
   function renderUsers(users) {
-    var html = '<table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Aktiv</th><th></th></tr></thead><tbody>';
+    var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Aktiv</th><th></th></tr></thead><tbody>';
     users.forEach(function (u) {
       html += '<tr><td>' + escapeHtml(u.firstName + ' ' + u.lastName) + '</td><td>' + escapeHtml(u.email) + '</td><td>' + (u.active ? 'Ja' : 'Nej') +
         '</td><td><button type="button" class="ghost" data-del-user="' + u.id + '">Radera</button></td></tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     $('usersList').innerHTML = html;
     $('usersList').querySelectorAll('[data-del-user]').forEach(function (btn) {
       btn.onclick = function () {
@@ -292,14 +316,14 @@
   };
 
   function renderPasses(passes) {
-    var html = '<table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Giltig</th><th>Status</th><th></th></tr></thead><tbody>';
+    var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Giltig</th><th>Status</th><th></th></tr></thead><tbody>';
     passes.forEach(function (p) {
       html += '<tr><td>' + escapeHtml(p.recipientName) + '</td><td>' + escapeHtml(p.recipientEmail) + '</td>' +
         '<td>' + p.startDate + ' – ' + p.endDate + '</td>' +
         '<td>' + (p.revoked ? 'Återkallad' : (p.validToday ? 'Gäller idag' : 'Utanför period')) + '</td>' +
         '<td>' + (p.revoked ? '' : '<button type="button" class="ghost" data-revoke-pass="' + p.id + '">Återkalla</button>') + '</td></tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     $('dpList').innerHTML = html;
     $('dpList').querySelectorAll('[data-revoke-pass]').forEach(function (btn) {
       btn.onclick = function () {

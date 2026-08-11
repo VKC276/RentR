@@ -50,21 +50,8 @@
           </div>
         </div>
         <p><button type="button" id="btnReload">Uppdatera</button></p>
-        <div style="overflow-x:auto;">
-          <table class="table" id="bookingsTable">
-            <thead>
-              <tr>
-                <th>Nr</th><th>Gäst</th><th>Period</th><th>Status</th><th>Summa</th><th>Betald</th><th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel" id="detailPanel" hidden>
-        <h2>Bokningsdetalj</h2>
-        <div id="detail"></div>
+        <div class="booking-list" id="bookingsList"></div>
+        <p class="muted" id="bookingsEmpty" hidden>Inga bokningar matchar.</p>
       </div>
 
       <div class="panel" id="doorPassSection">
@@ -124,6 +111,17 @@
         <p><button type="button" id="btnCreateUser">Skapa</button></p>
         <p class="err" id="userErr" hidden></p>
       </div>
+    </div>
+  </div>
+
+  <div class="modal" id="detailModal" hidden>
+    <div class="modal-backdrop" data-close-detail></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+      <div class="modal-head">
+        <h2 id="detailTitle">Bokningsdetalj</h2>
+        <button type="button" class="ghost icon" data-close-detail aria-label="Stäng">&#10005;</button>
+      </div>
+      <div class="modal-body" id="detail"></div>
     </div>
   </div>
 
