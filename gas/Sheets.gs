@@ -42,6 +42,17 @@ var HEADERS = {
 var SCHEMA_VERSION = 'v2';
 
 var ssCache_ = null;
+var tzCache_ = null;
+
+/**
+ * Date cells are created by Sheets in the spreadsheet's own timezone, so that
+ * is the only timezone in which reading one back yields the date a human sees.
+ * Formatting in a fixed zone silently shifts the day whenever the two differ.
+ */
+function sheetTimeZone_() {
+  if (!tzCache_) tzCache_ = getSpreadsheet_().getSpreadsheetTimeZone();
+  return tzCache_;
+}
 
 function getSpreadsheet_() {
   if (ssCache_) return ssCache_;
@@ -334,7 +345,7 @@ function normalizeCell_(v, field) {
   if (v === '' || v === null || typeof v === 'undefined') return '';
   if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
     return DATE_ONLY_FIELDS[field]
-      ? Utilities.formatDate(v, 'Europe/Stockholm', 'yyyy-MM-dd')
+      ? Utilities.formatDate(v, sheetTimeZone_(), 'yyyy-MM-dd')
       : v.toISOString();
   }
   if (v === true || v === false) return v;
