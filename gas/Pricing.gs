@@ -16,6 +16,26 @@ function parseYmd_(ymd) {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }
 
+function formatYmd_(d) {
+  var m = d.getMonth() + 1;
+  var day = d.getDate();
+  return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+}
+
+function eachDate_(startDate, endDate, fn) {
+  var d = parseYmd_(startDate);
+  var end = parseYmd_(endDate);
+  if (!d || !end) return;
+  while (d <= end) {
+    fn(formatYmd_(d));
+    d.setDate(d.getDate() + 1);
+  }
+}
+
+// Dates are stored as YYYY-MM-DD, so plain string comparison orders them.
+function minDate_(a, b) { return String(a) < String(b) ? String(a) : String(b); }
+function maxDate_(a, b) { return String(a) > String(b) ? String(a) : String(b); }
+
 function datesOverlap_(aStart, aEnd, bStart, bEnd) {
   var as = parseYmd_(aStart).getTime();
   var ae = parseYmd_(aEnd).getTime();

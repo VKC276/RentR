@@ -69,10 +69,10 @@ function route_(action, body, sessionToken, e) {
       return getAvailability_(body.startDate || e.parameter.startDate, body.endDate || e.parameter.endDate);
     // Each round trip costs far more in Google's redirect hop than the script
     // itself takes to run, so the pages fetch everything they need at once.
-    case 'getBookingPage':
+    case 'getCalendar':
       return {
         config: getPublicConfig_(),
-        availability: getAvailability_(body.startDate, body.endDate)
+        calendar: getCalendar_(body.from, body.to)
       };
     case 'createHold':
       return createHold_(body.padIds, body.startDate, body.endDate);

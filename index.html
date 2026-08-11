@@ -22,19 +22,19 @@
 
     <div class="panel" id="stepDates">
       <h1 id="titleBook">Book</h1>
-      <div class="row">
-        <div>
-          <label id="lblStart">Start</label>
-          <input type="date" id="startDate" />
-        </div>
-        <div>
-          <label id="lblEnd">End</label>
-          <input type="date" id="endDate" />
-        </div>
+      <div class="cal-head">
+        <button type="button" class="ghost" id="calPrev" aria-label="&#8249;">&#8249;</button>
+        <div class="cal-month" id="calMonth"></div>
+        <button type="button" class="ghost" id="calNext" aria-label="&#8250;">&#8250;</button>
+      </div>
+      <div class="cal" id="calendar"></div>
+      <div class="cal-legend">
+        <span><i></i><span id="legFree">Free</span></span>
+        <span><i class="taken"></i><span id="legTaken">Booked</span></span>
       </div>
       <p class="muted" id="daysHint"></p>
-      <p style="margin-top:1rem;">
-        <button type="button" id="btnCheck">Check</button>
+      <p style="margin-top:0.75rem;">
+        <button type="button" class="ghost" id="btnClearDates" hidden>Clear</button>
       </p>
       <p class="err" id="errDates" hidden></p>
     </div>
