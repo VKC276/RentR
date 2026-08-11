@@ -39,7 +39,7 @@ var HEADERS = {
 };
 
 /** Bump when HEADERS change so the next request rebuilds the schema. */
-var SCHEMA_VERSION = 'v1';
+var SCHEMA_VERSION = 'v2';
 
 var ssCache_ = null;
 
@@ -138,6 +138,7 @@ function ensureSchema(force) {
       range.setValues([headers]);
       sheet.setFrozenRows(1);
     }
+    forceTextTimestamps_(sheet, headers);
   });
   // Remove default Sheet1 if empty and unused
   var sheet1 = ss.getSheetByName('Sheet1');
@@ -147,6 +148,19 @@ function ensureSchema(force) {
   seedIfEmpty_();
   props.setProperty('SCHEMA_READY', SCHEMA_VERSION);
   return { ok: true };
+}
+
+/**
+ * Without this, Sheets parses an ISO timestamp into a date cell and reinterprets
+ * it in the spreadsheet's timezone, shifting a hold's expiry by the UTC offset.
+ * Plain text on the whole column keeps what we wrote, including future rows.
+ */
+function forceTextTimestamps_(sheet, headers) {
+  var rows = sheet.getMaxRows();
+  headers.forEach(function (h, i) {
+    if (DATE_ONLY_FIELDS[h] || !/At$|^at$/.test(h)) return;
+    sheet.getRange(2, i + 1, rows - 1, 1).setNumberFormat('@');
+  });
 }
 
 function seedIfEmpty_() {
@@ -298,7 +312,7 @@ function readAllObjects_(sheetName) {
         if (row.every(function (c) { return c === '' || c === null; })) continue;
         var obj = { _row: i + 1 };
         headers.forEach(function (h, idx) {
-          obj[h] = normalizeCell_(row[idx]);
+          obj[h] = normalizeCell_(row[idx], h);
         });
         cached.push(obj);
       }
@@ -308,10 +322,20 @@ function readAllObjects_(sheetName) {
   return cached.map(function (o) { return Object.assign({}, o); });
 }
 
-function normalizeCell_(v) {
+/**
+ * Sheets stores date-like text as real date cells, so a read has to put the
+ * value back in the shape the code expects. Only these columns are whole days;
+ * every other timestamp must keep its time, or expiresAt reads back as midnight
+ * and a fresh hold looks hours expired.
+ */
+var DATE_ONLY_FIELDS = { startDate: true, endDate: true };
+
+function normalizeCell_(v, field) {
   if (v === '' || v === null || typeof v === 'undefined') return '';
   if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
-    return Utilities.formatDate(v, 'Europe/Stockholm', 'yyyy-MM-dd');
+    return DATE_ONLY_FIELDS[field]
+      ? Utilities.formatDate(v, 'Europe/Stockholm', 'yyyy-MM-dd')
+      : v.toISOString();
   }
   if (v === true || v === false) return v;
   if (typeof v === 'string' && (v.toLowerCase() === 'true' || v.toLowerCase() === 'false')) {
