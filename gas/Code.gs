@@ -2,20 +2,13 @@
  * Web app entry points.
  * Deploy as web app: Execute as Me, Who has access: Anyone.
  *
- * Frontend uses an HtmlService iframe bridge (?bridge=1) + google.script.run
- * to avoid CORS/JSONP issues from GitHub Pages / custom domains.
+ * ContentService responses carry Access-Control-Allow-Origin: * through the
+ * /exec redirect, so the frontend talks to this with plain fetch. doGet also
+ * supports ?callback= for a JSONP fallback.
  */
 
 function doGet(e) {
   e = e || { parameter: {} };
-
-  // postMessage bridge for external sites (Pages)
-  if (e.parameter.bridge === '1') {
-    return HtmlService
-      .createHtmlOutputFromFile('Bridge')
-      .setTitle('RentR Bridge')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  }
 
   var action = e.parameter.action || 'ping';
   try {
@@ -51,23 +44,6 @@ function doGet(e) {
 
 function doPost(e) {
   return handleApi_(e);
-}
-
-/**
- * Called from Bridge.html via google.script.run
- */
-function bridgeCall(action, payload, sessionToken) {
-  try {
-    ensureSchema();
-    payload = payload || {};
-    if (payload.action) action = payload.action;
-    var result = route_(action, payload, sessionToken || payload.sessionToken || '', { parameter: {} });
-    return result;
-  } catch (err) {
-    // google.script.run failure handler gets Error; also return structured object
-    var msg = err && err.message ? err.message : String(err);
-    throw new Error(msg);
-  }
 }
 
 /**

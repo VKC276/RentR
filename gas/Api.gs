@@ -28,6 +28,8 @@ function handleApi_(e) {
 }
 
 function route_(action, body, sessionToken, e) {
+  e = e || {};
+  if (!e.parameter) e.parameter = {};
   switch (action) {
     case 'ping':
       return { ok: true, time: nowIso_() };

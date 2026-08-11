@@ -52,9 +52,12 @@ Live: **http://ledinfo.vastervikclimbing.se/RentR/**
 3. Pages: deploy from branch `main`, folder **`/` (root)**.
 4. Open the site and book a test period.
 
-API calls go through a GAS **iframe bridge** (`?bridge=1` + `google.script.run`) because
-`/exec` always redirects to `script.googleusercontent.com` (expected). JSONP with
-`referrerPolicy=no-referrer` is the fallback — both tolerate that redirect.
+API calls use plain `fetch`. GAS sends `Access-Control-Allow-Origin: *` on both the
+`/exec` redirect and the `script.googleusercontent.com` response, so cross-origin works
+as long as requests stay CORS-"simple" — the client posts a `text/plain` body and sets no
+custom headers, since Apps Script cannot answer a preflight `OPTIONS`. If POST is blocked,
+the client falls back to GET and then JSONP (`?callback=`), picking the transport once per
+page load.
 
 ## 3. Raspberry Pi
 
