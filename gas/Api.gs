@@ -75,7 +75,7 @@ function route_(action, body, sessionToken, e) {
         calendar: getCalendar_(body.from, body.to)
       };
     case 'createHold':
-      return createHold_(body.padIds, body.startDate, body.endDate);
+      return createHold_(body.padIds, body.startDate, body.endDate, body.replaceHoldToken);
     case 'releaseHold':
       return releaseHold_(body.holdToken);
     case 'submitBooking':

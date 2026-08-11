@@ -4,10 +4,9 @@
 
 function getAvailability_(startDate, endDate) {
   calcDays_(startDate, endDate); // validate before caching on the key
-  // Short TTL: a hold lapsing frees a pad without any write to invalidate on.
   return cachedResult_('avail_' + startDate + '_' + endDate, function () {
     return computeAvailability_(startDate, endDate);
-  }, 30);
+  }, holdAwareTtl_);
 }
 
 function activePads_() {
@@ -33,10 +32,9 @@ function activePads_() {
  */
 function getCalendar_(from, to) {
   calcDays_(from, to);
-  // Short TTL: a hold lapsing frees a pad without any write to invalidate on.
   return cachedResult_('cal_' + from + '_' + to, function () {
     return computeCalendar_(from, to);
-  }, 30);
+  }, holdAwareTtl_);
 }
 
 function computeCalendar_(from, to) {

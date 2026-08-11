@@ -10,7 +10,8 @@
     pads: [],
     // 'YYYY-MM-DD' -> { padIndex: true }, merged across every month loaded.
     blocked: {},
-    loadedMonths: {}
+    loadedMonths: {},
+    fetchedMonths: {}
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -111,13 +112,51 @@
     state.loadedMonths[cal.from.slice(0, 7)] = true;
   }
 
+  var STORE_PREFIX = 'calMonth_';
+  var MAX_STALE_MS = 6 * 3600 * 1000;
+
+  function readStoredMonth(key) {
+    try {
+      var rec = JSON.parse(localStorage.getItem(STORE_PREFIX + key));
+      if (!rec || Date.now() - rec.ts > MAX_STALE_MS) return null;
+      return rec.calendar;
+    } catch (e) { return null; }
+  }
+
+  function storeMonth(key, calendar) {
+    try {
+      localStorage.setItem(STORE_PREFIX + key, JSON.stringify({ ts: Date.now(), calendar: calendar }));
+    } catch (e) { /* quota or private mode */ }
+  }
+
+  function forgetStoredMonths() {
+    try {
+      Object.keys(localStorage)
+        .filter(function (k) { return k.indexOf(STORE_PREFIX) === 0; })
+        .forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) { /* private mode */ }
+  }
+
+  /**
+   * Paints from the last answer we saw so the month appears at once, and still
+   * refreshes behind it. The server revalidates everything at hold time, so a
+   * few stale seconds on screen cannot produce a bad booking.
+   */
+  function primeFromStore(date) {
+    var cal = readStoredMonth(monthKey(date));
+    if (!cal) return false;
+    absorbCalendar(cal);
+    return true;
+  }
+
   /**
    * A month of per-day availability arrives in one request, which is what lets
    * the range selection recolour instantly instead of asking the server again.
    */
   function loadMonth(date) {
     var key = monthKey(date);
-    if (state.loadedMonths[key]) return Promise.resolve();
+    if (state.fetchedMonths[key]) return Promise.resolve();
+    state.fetchedMonths[key] = true;
     var from = new Date(date.getFullYear(), date.getMonth(), 1);
     var to = new Date(date.getFullYear(), date.getMonth() + 1, 0);
     return Api.call('getCalendar', { from: ymd(from), to: ymd(to) }).then(function (res) {
@@ -126,6 +165,10 @@
         Api.cacheConfig(res.config);
       }
       absorbCalendar(res.calendar);
+      storeMonth(key, res.calendar);
+    }).catch(function (err) {
+      delete state.fetchedMonths[key];
+      throw err;
     });
   }
 
@@ -134,10 +177,10 @@
     var d = parseYmd(startDate.slice(0, 7) + '-01');
     var last = parseYmd(endDate.slice(0, 7) + '-01');
     while (d <= last) {
-      if (!state.loadedMonths[monthKey(d)]) pending.push(new Date(d));
+      if (!state.loadedMonths[monthKey(d)] && !primeFromStore(d)) pending.push(new Date(d));
       d.setMonth(d.getMonth() + 1);
     }
-    return Promise.all(pending.map(loadMonth));
+    return Promise.all(pending.map(function (m) { return loadMonth(m); }));
   }
 
   function renderCalendar() {
@@ -310,8 +353,9 @@
 
   function stepMonth(delta) {
     state.month = new Date(state.month.getFullYear(), state.month.getMonth() + delta, 1);
+    var known = state.loadedMonths[monthKey(state.month)] || primeFromStore(state.month);
     renderCalendar();
-    $('calendar').classList.add('cal-loading');
+    if (!known) $('calendar').classList.add('cal-loading');
     loadMonth(state.month).then(function () {
       renderCalendar();
     }).catch(function (err) {
@@ -338,18 +382,15 @@
   $('btnHold').addEventListener('click', function () {
     showErr('errPads');
     if (!state.selected.length) return;
-    // An earlier hold of ours would otherwise block the pads we are re-picking.
+    // An earlier hold of ours would otherwise block the pads we are re-picking;
+    // the server swaps it out as part of the same request.
     var prev = state.hold;
     state.hold = null;
-    var work = (prev
-      ? Api.call('releaseHold', { holdToken: prev.holdToken }).catch(function () {})
-      : Promise.resolve()
-    ).then(function () {
-      return Api.call('createHold', {
-        padIds: state.selected,
-        startDate: state.startDate,
-        endDate: state.endDate
-      });
+    var work = Api.call('createHold', {
+      padIds: state.selected,
+      startDate: state.startDate,
+      endDate: state.endDate,
+      replaceHoldToken: prev ? prev.holdToken : ''
     });
 
     Status.button($('btnHold'), I18n.t('busyHold'), work).then(function (hold) {
@@ -395,6 +436,7 @@
     }
     Status.button($('btnSubmit'), I18n.t('busySubmit'), Api.call('submitBooking', payload)).then(function (res) {
       if (state.timerId) clearInterval(state.timerId);
+      forgetStoredMonths();
       $('stepDates').hidden = true;
       $('stepPads').hidden = true;
       $('stepForm').hidden = true;
@@ -412,9 +454,12 @@
   if (cached) useConfig(cached);
   state.month = new Date();
   state.month.setDate(1);
+  var primed = primeFromStore(state.month);
   applyI18n();
 
-  Status.during(I18n.t('busyCalendar'), loadMonth(state.month)).then(function () {
+  // Only make the user wait when there is nothing to show yet.
+  var initial = loadMonth(state.month);
+  (primed ? initial : Status.during(I18n.t('busyCalendar'), initial)).then(function () {
     renderCalendar();
   }).catch(function (err) {
     showErr('errDates', err.message || I18n.t('error'));

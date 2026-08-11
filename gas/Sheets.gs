@@ -88,8 +88,11 @@ function cachedResult_(name, produce, ttlSec) {
     try { return JSON.parse(hit); } catch (e) { /* fall through */ }
   }
   var value = produce();
+  // A TTL callback runs after produce() so it can look at rows the producer has
+  // already read into the per-request cache.
+  var ttl = typeof ttlSec === 'function' ? ttlSec() : ttlSec;
   try {
-    cache.put(key, JSON.stringify(value), ttlSec || RESULT_TTL_SEC);
+    cache.put(key, JSON.stringify(value), ttl || RESULT_TTL_SEC);
   } catch (e) { /* too large to cache */ }
   return value;
 }

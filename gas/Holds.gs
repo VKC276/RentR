@@ -10,15 +10,28 @@ var BLOCKING_STATUSES = {
   HandedOut: true
 };
 
+/**
+ * Tidies lapsed rows in one column write. Row-by-row updates put a Sheets round
+ * trip per stale hold in front of the guest who is trying to book, and the
+ * common case — nothing to expire — now writes nothing at all.
+ */
 function expireHolds_() {
   var holds = readAllObjects_(SHEET_NAMES.Holds);
   var now = Date.now();
+  var rows = [];
   holds.forEach(function (h) {
-    if (h.status !== 'active') return;
-    if (new Date(h.expiresAt).getTime() < now) {
-      updateObjectById_(SHEET_NAMES.Holds, h.id, { status: 'expired' });
-    }
+    if (h.status === 'active' && new Date(h.expiresAt).getTime() < now) rows.push(h._row);
   });
+  if (!rows.length) return;
+
+  var column = HEADERS[SHEET_NAMES.Holds].indexOf('status') + 1;
+  var firstRow = Math.min.apply(null, rows);
+  var lastRow = Math.max.apply(null, rows);
+  var range = getSheet_(SHEET_NAMES.Holds).getRange(firstRow, column, lastRow - firstRow + 1, 1);
+  var values = range.getValues();
+  rows.forEach(function (r) { values[r - firstRow][0] = 'expired'; });
+  range.setValues(values);
+  invalidateTable_(SHEET_NAMES.Holds);
 }
 
 function parsePadIds_(value) {
@@ -27,13 +40,19 @@ function parsePadIds_(value) {
   return String(value).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 }
 
-function createHold_(padIds, startDate, endDate) {
+/**
+ * replaceHoldToken lets a guest who changed their pad selection swap holds in a
+ * single request; releasing first would cost an extra round trip, and the old
+ * hold must be ignored while checking so it cannot conflict with itself.
+ */
+function createHold_(padIds, startDate, endDate, replaceHoldToken) {
   expireHolds_();
   calcDays_(startDate, endDate); // validate
   padIds = (padIds || []).map(String);
   if (!padIds.length) throw softError_('Välj minst en crashpad', 400);
 
-  assertPadsAvailable_(padIds, startDate, endDate, null);
+  if (replaceHoldToken) releaseHold_(replaceHoldToken);
+  assertPadsAvailable_(padIds, startDate, endDate, null, replaceHoldToken || null);
 
   var minutes = Number(getConfig_('holdMinutes', '15'));
   var hold = {
@@ -94,6 +113,22 @@ function getActiveHolds_() {
   return readAllObjects_(SHEET_NAMES.Holds).filter(function (h) {
     return h.status === 'active' && new Date(h.expiresAt).getTime() >= Date.now();
   });
+}
+
+/**
+ * Every write bumps the data version, so a cached availability answer can only
+ * go stale on its own when a hold lapses by the clock. Cache until that moment,
+ * which in practice means the full TTL because holds are rare and short-lived.
+ */
+function holdAwareTtl_() {
+  var now = Date.now();
+  var soonest = 0;
+  getActiveHolds_().forEach(function (h) {
+    var ms = new Date(h.expiresAt).getTime() - now;
+    if (ms > 0 && (!soonest || ms < soonest)) soonest = ms;
+  });
+  if (!soonest) return RESULT_TTL_SEC;
+  return Math.max(5, Math.min(RESULT_TTL_SEC, Math.ceil(soonest / 1000)));
 }
 
 function assertPadsAvailable_(padIds, startDate, endDate, ignoreBookingId, ignoreHoldToken) {
