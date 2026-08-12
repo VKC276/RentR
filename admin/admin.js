@@ -516,7 +516,7 @@
           escapeHtml(c.otherNumber) + ' (' + escapeHtml(c.otherGuest) + ', ' +
           c.otherStart + ' – ' + c.otherEnd + ', ' + escapeHtml(statusLabel(c.otherStatus)) + ')</li>';
       });
-      html += '</ul><p class="muted">Byt utrustning under Mer → Utrustning.</p></div>';
+      html += '</ul><p class="muted">Justera under Mer → Ändra period &amp; utrustning.</p></div>';
     }
 
     html += '<div class="detail-summary">';
@@ -636,9 +636,9 @@
 
     if (canEditPads) {
       html += accordion({
-        title: 'Ändra datum',
-        open: false,
-        lead: 'Flytta bokningens start- och slutdatum. Priset räknas om automatiskt.',
+        title: 'Ändra period & utrustning',
+        open: !!b.doubleBooked,
+        lead: 'Ändra datum och utrustning tillsammans — då går det att lösa krockar i ett steg. Priset räknas om automatiskt.',
         body:
           '<div class="row">' +
           '<div><label for="edStart">Från</label><input id="edStart" type="date" value="' +
@@ -646,34 +646,27 @@
           '<div><label for="edEnd">Till</label><input id="edEnd" type="date" value="' +
           escapeHtml(b.endDate) + '" /></div>' +
           '</div>' +
-          '<div class="actions"><button type="button" id="actSaveDates">Spara datum</button></div>' +
+          '<p class="muted" style="margin:0.75rem 0 0.35rem;">Utrustning för vald period</p>' +
+          '<div id="editPadsBox"><p class="muted">Laddar…</p></div>' +
+          '<div class="actions"><button type="button" id="actSaveSchedule">Spara period &amp; utrustning</button></div>' +
           '<p class="err" id="edErr" hidden></p>'
-      });
-      html += accordion({
-        title: 'Ändra utrustning',
-        open: !!b.doubleBooked,
-        lead: 'Byt vilken utrustning bokningen gäller.',
-        body: '<div class="actions"><button type="button" class="ghost" id="actEditPads">Välj utrustning</button></div>' +
-          '<div id="editPadsBox" class="detail-panel" hidden></div>'
       });
     } else {
       html += '<div id="editPadsBox" hidden></div>';
     }
 
     html += accordion({
-      title: 'Mejl till kund',
+      title: 'Mejl & radering',
       open: false,
-      lead: 'Skicka en ny magisk länk om kunden inte hittat sitt mejl.',
-      body: '<div class="actions"><button type="button" class="ghost" id="actResendMail">Skicka magisk länk igen</button></div>' +
-        '<p class="ok" id="mailOk" hidden></p>'
-    });
-
-    html += accordion({
-      title: 'Radera bokning',
-      danger: true,
-      open: false,
-      lead: 'Tar bort bokningen permanent. Kan inte ångras.',
-      body: '<div class="actions"><button type="button" class="warn" id="actDelete">Radera bokning</button></div>'
+      lead: 'Skicka länk igen eller ta bort bokningen.',
+      body:
+        '<p class="muted" style="margin:0 0 0.35rem;">Mejl till kund</p>' +
+        '<div class="actions"><button type="button" class="ghost" id="actResendMail">Skicka magisk länk igen</button></div>' +
+        '<p class="ok" id="mailOk" hidden></p>' +
+        '<hr style="border:0;border-top:1px solid var(--line);margin:1rem 0;" />' +
+        '<p class="muted" style="margin:0 0 0.35rem;">Radera bokning</p>' +
+        '<p class="detail-section-lead muted">Tar bort bokningen permanent. Kan inte ångras.</p>' +
+        '<div class="actions"><button type="button" class="warn" id="actDelete">Radera bokning</button></div>'
     });
 
     html += '</div>';
@@ -840,11 +833,82 @@
     autoSaveFlag('flagPickup', 'allowSelfPickup');
     autoSaveFlag('flagReturn', 'allowSelfReturn');
 
-    if ($('actSaveDates')) {
-      $('actSaveDates').onclick = function () {
+    if ($('actSaveSchedule')) {
+      var schedulePadById = {};
+      var scheduleSelected = {};
+      (b.padIds || []).forEach(function (id) { scheduleSelected[String(id)] = true; });
+
+      function renderSchedulePads(pads) {
+        var box = $('editPadsBox');
+        if (!box) return;
+        schedulePadById = {};
+        (pads || []).forEach(function (p) { schedulePadById[String(p.id)] = p; });
+        var rows = (pads || []).map(function (p) {
+          var id = String(p.id);
+          var isSelected = !!scheduleSelected[id];
+          var checked = isSelected ? ' checked' : '';
+          var disabled = !p.available && !isSelected ? ' disabled' : '';
+          var mark;
+          if (isSelected && !p.available) {
+            mark = '<span class="badge badge-double">Konflikt</span>';
+          } else if (isSelected) {
+            mark = '<span class="badge">Vald</span>';
+          } else if (p.available) {
+            mark = '<span class="badge paid">Ledig</span>';
+          } else {
+            mark = '<span class="badge unpaid">Upptagen</span>';
+          }
+          return '<label class="check pad-pick' + (disabled ? ' is-disabled' : '') + '">' +
+            '<input type="checkbox" name="epPad" value="' + escapeHtml(p.id) + '"' +
+            checked + disabled + '>' +
+            '<span>' + escapeHtml(p.name) + '</span> ' + mark +
+            '</label>';
+        }).join('');
+        box.innerHTML =
+          '<p class="muted">Bocka ledig utrustning för perioden. Upptagen kan inte väljas. Vid konflikt: byt datum eller utrustning innan du sparar.</p>' +
+          '<div class="pad-picks">' + (rows || '<p class="muted">Ingen utrustning.</p>') + '</div>';
+        box.querySelectorAll('input[name="epPad"]').forEach(function (el) {
+          el.onchange = function () {
+            if (el.checked) scheduleSelected[String(el.value)] = true;
+            else delete scheduleSelected[String(el.value)];
+          };
+        });
+      }
+
+      function loadSchedulePads(btn) {
         var startDate = $('edStart').value;
         var endDate = $('edEnd').value;
-        var btn = $('actSaveDates');
+        var box = $('editPadsBox');
+        if (!startDate || !endDate || startDate > endDate) {
+          if (box) box.innerHTML = '<p class="muted">Ange giltiga datum för att se ledig utrustning.</p>';
+          return Promise.resolve();
+        }
+        // Keep current checkbox state across date refreshes.
+        if (box) {
+          box.querySelectorAll('input[name="epPad"]').forEach(function (el) {
+            if (el.checked) scheduleSelected[String(el.value)] = true;
+            else delete scheduleSelected[String(el.value)];
+          });
+        }
+        return api('availablePadsForBooking', {
+          bookingId: b.id,
+          startDate: startDate,
+          endDate: endDate
+        }, btn).then(function (res) {
+          renderSchedulePads(res.pads || []);
+        }).catch(function (e) {
+          if (box) box.innerHTML = '<p class="err">' + escapeHtml(e.message) + '</p>';
+        });
+      }
+
+      $('edStart').onchange = function () { loadSchedulePads(); };
+      $('edEnd').onchange = function () { loadSchedulePads(); };
+      loadSchedulePads();
+
+      $('actSaveSchedule').onclick = function () {
+        var startDate = $('edStart').value;
+        var endDate = $('edEnd').value;
+        var btn = $('actSaveSchedule');
         if (!startDate || !endDate) {
           showNearErr('edErr', 'Ange både start- och slutdatum.');
           return;
@@ -853,100 +917,36 @@
           showNearErr('edErr', 'Startdatum måste vara före eller samma som slutdatum.');
           return;
         }
-        showNearErr('edErr', '');
-        api('availablePadsForBooking', {
-          bookingId: b.id,
-          startDate: startDate,
-          endDate: endDate
-        }, btn).then(function (res) {
-          var selected = {};
-          (b.padIds || []).forEach(function (id) { selected[String(id)] = true; });
-          var conflicts = (res.pads || []).filter(function (p) {
-            return selected[String(p.id)] && !p.available;
-          });
-          if (conflicts.length) {
-            showNearErr(
-              'edErr',
-              'Kan inte spara — vald utrustning är upptagen på nya datumen: ' +
-                conflicts.map(function (p) { return p.name; }).join(', ') +
-                '. Byt utrustning eller välj andra datum.'
-            );
-            return;
-          }
-          return act('setDates', { startDate: startDate, endDate: endDate }, btn, 'edErr');
-        }).catch(function (e) {
-          showNearErr('edErr', e.message);
-        });
-      };
-    }
-
-    if ($('actEditPads')) {
-      $('actEditPads').onclick = function () {
+        var ids = [];
+        var conflictNames = [];
         var box = $('editPadsBox');
-        box.hidden = false;
-        box.innerHTML = '<p><strong>Ändra utrustning</strong></p><p id="epList">Laddar…</p>';
-        api('availablePadsForBooking', { bookingId: b.id }, $('actEditPads')).then(function (res) {
-          var pads = res.pads || [];
-          var byId = {};
-          pads.forEach(function (p) { byId[String(p.id)] = p; });
-          var assigned = {};
-          (b.padIds || []).forEach(function (id) { assigned[String(id)] = true; });
-          var rows = pads.map(function (p) {
-            var isAssigned = !!assigned[String(p.id)];
-            var checked = isAssigned ? ' checked' : '';
-            var disabled = !p.available && !isAssigned ? ' disabled' : '';
-            var mark;
-            if (isAssigned && !p.available) {
-              mark = '<span class="badge badge-double">Dubbel</span>';
-            } else if (isAssigned) {
-              mark = '<span class="badge">Vald</span>';
-            } else if (p.available) {
-              mark = '<span class="badge paid">Ledig</span>';
-            } else {
-              mark = '<span class="badge unpaid">Upptagen</span>';
-            }
-            return '<label class="check pad-pick' + (disabled ? ' is-disabled' : '') + '">' +
-              '<input type="checkbox" name="epPad" value="' + escapeHtml(p.id) + '"' +
-              checked + disabled + '>' +
-              '<span>' + escapeHtml(p.name) + '</span> ' + mark +
-              '</label>';
-          }).join('');
-          box.innerHTML =
-            '<p><strong>Ändra utrustning</strong></p>' +
-            '<p class="muted">Bocka för ledig utrustning. Upptagen utrustning kan inte väljas. Sparande stoppas om något valt är i konflikt.</p>' +
-            '<div class="pad-picks">' + rows + '</div>' +
-            '<div class="actions"><button type="button" id="epSave">Spara utrustning</button></div>' +
-            '<p class="err" id="epErr" hidden></p>';
-          $('epSave').onclick = function () {
-            var ids = [];
-            var conflictNames = [];
-            box.querySelectorAll('input[name="epPad"]:checked').forEach(function (el) {
-              ids.push(el.value);
-              var p = byId[String(el.value)];
-              if (p && !p.available) conflictNames.push(p.name);
-            });
-            if (!ids.length) {
-              showNearErr('epErr', 'Välj minst en utrustning.');
-              return;
-            }
-            if (conflictNames.length) {
-              showNearErr(
-                'epErr',
-                'Kan inte spara — vald utrustning är i konflikt: ' +
-                  conflictNames.join(', ') +
-                  '. Avmarkera den och välj ledig utrustning.'
-              );
-              return;
-            }
-            act('setPads', { padIds: ids }, $('epSave'), 'epErr');
-          };
-        }).catch(function (e) {
-          box.innerHTML = '<p class="err">' + escapeHtml(e.message) + '</p>';
-        });
+        if (box) {
+          box.querySelectorAll('input[name="epPad"]:checked').forEach(function (el) {
+            ids.push(el.value);
+            var p = schedulePadById[String(el.value)];
+            if (p && !p.available) conflictNames.push(p.name);
+          });
+        }
+        if (!ids.length) {
+          showNearErr('edErr', 'Välj minst en utrustning.');
+          return;
+        }
+        if (conflictNames.length) {
+          showNearErr(
+            'edErr',
+            'Kan inte spara — vald utrustning är i konflikt på perioden: ' +
+              conflictNames.join(', ') +
+              '. Byt datum eller utrustning.'
+          );
+          return;
+        }
+        showNearErr('edErr', '');
+        act('setSchedule', {
+          startDate: startDate,
+          endDate: endDate,
+          padIds: ids
+        }, btn, 'edErr');
       };
-      // Open the editor at once when the booking is double-booked — that is why
-      // the admin opened the card.
-      if (b.doubleBooked) $('actEditPads').click();
     }
   }
 
