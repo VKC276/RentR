@@ -12,10 +12,9 @@
     <div class="topbar">
       <div class="brand">RentR Admin</div>
       <nav class="nav" id="nav" hidden>
-        <a href="#bookings">Bokningar</a>
-        <a href="#doorpass">Dörrlänk</a>
-        <a href="#pricing">Priser</a>
-        <a href="#users">Användare</a>
+        <a href="#bookings" data-view="bookings" class="is-active">Bokningar</a>
+        <a href="#doorpass" data-view="doorpass">Dörrlänk</a>
+        <a href="#settings" data-view="settings">Inställningar</a>
         <a href="#" id="logout">Logga ut</a>
       </nav>
     </div>
@@ -31,7 +30,7 @@
     </div>
 
     <div id="app" hidden>
-      <div class="panel" id="bookingsSection">
+      <div class="panel admin-view" id="bookingsSection" data-view="bookings">
         <h2>Bokningar</h2>
         <div class="timeline" id="timeline">
           <div class="timeline-head">
@@ -57,7 +56,7 @@
         <p class="muted" id="bookingsEmpty" hidden>Inga bokningar matchar.</p>
       </div>
 
-      <div class="panel" id="doorPassSection">
+      <div class="panel admin-view" id="doorPassSection" data-view="doorpass" hidden>
         <h2>Skicka dörrlänk</h2>
         <p class="muted">Mejl med länk till en sida som bara har Open door. Giltig mellan start- och slutdatum (inklusive).</p>
         <div class="row">
@@ -84,6 +83,7 @@
         <p class="muted" id="dpEmpty" hidden>Inga länkar har skickats.</p>
       </div>
 
+      <div class="admin-view" id="settingsView" data-view="settings" hidden>
       <div class="panel" id="pricingSection">
         <h2>Priser & rabatter</h2>
         <h3>Utrustning</h3>
@@ -133,6 +133,7 @@
         </div>
         <p><button type="button" id="btnCreateUser">Skapa</button></p>
         <p class="err" id="userErr" hidden></p>
+      </div>
       </div>
     </div>
   </div>

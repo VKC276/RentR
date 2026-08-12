@@ -727,6 +727,24 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 0.85rem;
 }
 .detail-facts dd { margin: 0; }
+.detail-guest-message {
+  margin: 0.65rem 0 0;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface-2, #f4f8f8);
+  border-radius: 10px;
+  border-left: 3px solid var(--accent, #0d6e6e);
+}
+.detail-guest-message-label {
+  margin: 0 0 0.25rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.guest-notes {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .detail-section {
   padding: 1rem 0;
   border-bottom: 1px solid var(--line);
@@ -900,6 +918,13 @@ button.ghost.is-busy .status-spinner {
   text-decoration: none;
 }
 .nav a:hover { background: #fff; }
+.nav a.is-active {
+  background: var(--ink, #1a2b33);
+  border-color: var(--ink, #1a2b33);
+  color: #fff;
+}
+.nav a.is-active:hover { background: var(--ink, #1a2b33); }
+.admin-view[hidden] { display: none !important; }
 @media (max-width: 640px) {
   .brand { font-size: 1.25rem; }
 }

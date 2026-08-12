@@ -30,6 +30,7 @@ const MAIL_I18N = {
     labelTotal: 'Summa',
     labelStatus: 'Status',
     labelGuest: 'Gäst',
+    labelGuestMessage: 'Meddelande',
     labelManage: 'Hantera bokning',
     labelOpen: 'Öppna dörr',
     labelValid: 'Giltig',
@@ -214,6 +215,20 @@ function bookingRows(locale, v, { withStatus = false, withTotal = true } = {}) {
   return rows;
 }
 
+function adminBookingRows(locale, booking, v, opts) {
+  return [
+    { label: t(locale, 'labelGuest'), value: `${v.name} (${v.email})` },
+    ...bookingRows(locale, v, opts),
+    ...guestMessageRows(locale, booking),
+  ];
+}
+
+function guestMessageRows(locale, booking) {
+  const msg = String(booking.notes || '').trim();
+  if (!msg) return [];
+  return [{ label: t(locale, 'labelGuestMessage'), value: msg }];
+}
+
 /**
  * Apps Script web apps run doPost on the first /exec hit, then 302 to
  * script.googleusercontent.com which only serves the result via GET.
@@ -321,10 +336,7 @@ export async function mailBookingCreated(env, booking, magicToken) {
     bookingNumber: v.bookingNumber,
     intro: t('sv', 'adminNewIntro', v),
     vars: { name: 'admin' },
-    rows: [
-      { label: t('sv', 'labelGuest'), value: `${v.name} (${v.email})` },
-      ...bookingRows('sv', v),
-    ],
+    rows: adminBookingRows('sv', booking, v),
     ctaLabel: t('sv', 'labelManage'),
     ctaUrl: v.url,
   });
@@ -365,10 +377,7 @@ export async function mailGuestCancelled(env, booking, magicToken) {
     bookingNumber: v.bookingNumber,
     intro: t('sv', 'adminCancelledIntro', v),
     vars: { name: 'admin' },
-    rows: [
-      { label: t('sv', 'labelGuest'), value: `${v.name} (${v.email})` },
-      ...bookingRows('sv', v, { withTotal: false }),
-    ],
+    rows: adminBookingRows('sv', booking, v, { withTotal: false }),
     ctaLabel: t('sv', 'labelManage'),
     ctaUrl: v.url,
   });
@@ -384,10 +393,7 @@ export async function mailAdminChange(env, booking, magicToken) {
     bookingNumber: v.bookingNumber,
     intro: t('sv', 'adminChangeIntro', v),
     vars: { name: 'admin' },
-    rows: [
-      { label: t('sv', 'labelGuest'), value: `${v.name} (${v.email})` },
-      ...bookingRows('sv', v),
-    ],
+    rows: adminBookingRows('sv', booking, v),
     ctaLabel: t('sv', 'labelManage'),
     ctaUrl: v.url,
   });

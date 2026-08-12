@@ -80,7 +80,39 @@
     $('loginPanel').hidden = !show;
     $('app').hidden = show;
     $('nav').hidden = show;
+    if (!show) showView(currentView());
   }
+
+  var VIEWS = { bookings: true, doorpass: true, settings: true };
+
+  function currentView() {
+    var hash = (location.hash || '').replace(/^#/, '');
+    if (hash === 'pricing' || hash === 'users') return 'settings';
+    return VIEWS[hash] ? hash : 'bookings';
+  }
+
+  function showView(name) {
+    var view = VIEWS[name] ? name : 'bookings';
+    document.querySelectorAll('.admin-view').forEach(function (el) {
+      el.hidden = el.getAttribute('data-view') !== view;
+    });
+    document.querySelectorAll('#nav a[data-view]').forEach(function (a) {
+      a.classList.toggle('is-active', a.getAttribute('data-view') === view);
+    });
+    if (location.hash !== '#' + view) {
+      history.replaceState(null, '', '#' + view);
+    }
+  }
+
+  window.addEventListener('hashchange', function () {
+    if (!$('app').hidden) showView(currentView());
+  });
+
+  document.querySelectorAll('#nav a[data-view]').forEach(function (a) {
+    a.addEventListener('click', function () {
+      showView(a.getAttribute('data-view'));
+    });
+  });
 
   function requireSession() {
     if (!session) {
@@ -433,6 +465,13 @@
     html += '</p>';
     html += '<p class="detail-guest"><strong>' + escapeHtml(b.firstName + ' ' + b.lastName) + '</strong></p>';
     html += '<p class="muted">' + escapeHtml(b.phone) + ' · ' + escapeHtml(b.email) + '</p>';
+    var guestNotes = String(b.notes || '').trim();
+    if (guestNotes) {
+      html += '<div class="detail-guest-message">';
+      html += '<p class="detail-guest-message-label">Meddelande från gäst</p>';
+      html += '<p class="guest-notes">' + escapeHtml(guestNotes) + '</p>';
+      html += '</div>';
+    }
     html += '<div class="actions" style="margin-top:0.75rem;">';
     html += '<button type="button" id="actResendMail">Skicka magisk länk igen</button>';
     html += '</div>';

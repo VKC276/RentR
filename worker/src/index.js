@@ -23,6 +23,7 @@ import {
   loginAdmin,
   logout,
   me,
+  changePassword,
   requireAdmin,
   setup,
 } from './auth.js';
