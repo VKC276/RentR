@@ -28,6 +28,13 @@ cd ~/RentR/pi
 ./update.sh --enable
 ```
 
+Om install faller på `lgpio` / `swig`: ta bort gammal venv och kör om (apt `python3-lgpio` + `--system-site-packages`):
+
+```bash
+rm -rf ~/RentR/pi/.venv
+cd ~/RentR/pi && ./update.sh --enable
+```
+
 ## Innehåll
 
 | Fil | Syfte |
@@ -37,7 +44,7 @@ cd ~/RentR/pi
 | `install.sh` | venv, deps, env, systemd |
 | `update.sh` | `git pull` + `install.sh` |
 | `rentr-door.env.example` | Mall för secrets |
-| `requirements.txt` | gpiozero (+ lgpio på Pi) |
+| `requirements.txt` | gpiozero (lgpio via apt) |
 | `rentr-door.service` | Exempel-unit (skrivs om av install) |
 
 ## Kabeldragning
@@ -82,5 +89,6 @@ sudo journalctl -u rentr-door -n 50 --no-pager
 ```
 
 - `Unauthorized` → fel `PI_API_KEY` / `DOOR_API_KEY`
+- `lgpio` / `swig`-fel vid pip → `rm -rf .venv` och `./update.sh --enable` (använd apt `python3-lgpio`)
 - Inget kommando → tryck Öppna dörr på giltig länk, vänta ≤ `POLL_SEC`
 - Relä klickar inte → prova `RELAY_ACTIVE_HIGH=1`, kontrollera BCM-pin och 5V

@@ -46,12 +46,19 @@ if [[ "$SKIP_APT" -eq 0 ]]; then
   fi
 fi
 
-echo "==> Python venv"
-python3 -m venv "$VENV"
+echo "==> Python venv (system-site-packages so apt python3-lgpio is visible)"
+python3 -m venv --system-site-packages "$VENV"
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
 pip install --upgrade pip
 pip install -r "$DIR/requirements.txt"
+
+# gpiozero on Pi 5 needs lgpio; prefer the apt module over a pip build.
+if ! "$VENV/bin/python" -c "import lgpio" 2>/dev/null; then
+  echo "VARNING: python-modulen lgpio hittades inte." >&2
+  echo "         Kör: sudo apt-get install -y python3-lgpio" >&2
+  echo "         (venv måste ha skapats med --system-site-packages)" >&2
+fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "==> Creating $ENV_FILE (set PI_API_KEY!)"
