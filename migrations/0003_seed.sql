@@ -28,6 +28,7 @@ INSERT OR IGNORE INTO config (key, value) VALUES
   ('timezone', 'Europe/Stockholm'),
   ('pagesBaseUrl', 'https://rent.vastervikclimbing.se'),
   ('sessionHours', '0'),
-  ('magicLinkDays', '90');
+  ('magicLinkDays', '90'),
+  ('closedBookingRetentionMonths', '6');
 
 INSERT OR IGNORE INTO counters (key, value) VALUES ('bookingNumber', 0);

@@ -83,6 +83,18 @@
       </div>
 
       <div class="admin-view" id="settingsView" data-view="settings" hidden>
+      <div class="panel" id="systemSection">
+        <h2>System</h2>
+        <h3>Autorensning</h3>
+        <p class="muted">Avslutade bokningar (återlämnade, avbokade, avslagna) raderas automatiskt efter angiven tid. Autorensning körs dagligen och när admin öppnas.</p>
+        <div class="row">
+          <div><label>Behåll avslutade (månader)</label><input id="cfgRetentionMonths" type="number" min="0" max="120" step="1" value="6" /></div>
+        </div>
+        <p class="muted">Sätt till 0 för att stänga av autorensning.</p>
+        <p><button type="button" id="btnSaveConfig">Spara</button></p>
+        <p class="ok" id="cfgOk" hidden></p>
+        <p class="err" id="cfgErr" hidden></p>
+      </div>
       <div class="panel" id="pricingSection">
         <h2>Priser & rabatter</h2>
         <h3>Utrustning</h3>

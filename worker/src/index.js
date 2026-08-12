@@ -6,8 +6,8 @@
  * Mail is fire-and-forget to a GAS webhook (see mail.js).
  */
 
-import { json, softError, CORS_HEADERS, nowIso } from './util.js';
-import { getPublicConfig } from './config.js';
+import { json, softError, CORS_HEADERS, nowIso, kick } from './util.js';
+import { getPublicConfig, getAdminConfig, saveAdminConfig } from './config.js';
 import { getCalendar, getAvailability } from './calendar.js';
 import {
   submitBooking,
@@ -18,6 +18,8 @@ import {
   listBookingsAdmin,
   adminUpdateBooking,
   availablePadsForBooking,
+  deleteBookingAdmin,
+  purgeOldClosedBookings,
 } from './bookings.js';
 import {
   loginAdmin,
@@ -140,7 +142,7 @@ async function route(env, action, body, ctx) {
       return { bookings: await listBookingsAdmin(env.DB, body) };
     case 'adminOverview':
       await requireAdmin(env, sessionToken);
-      return adminOverview(env.DB, body);
+      return adminOverview(env, body, ctx);
     case 'adminUpdateBooking':
       return adminUpdateBooking(
         env,
@@ -149,6 +151,15 @@ async function route(env, action, body, ctx) {
         await requireAdmin(env, sessionToken),
         ctx
       );
+    case 'deleteBooking':
+      await requireAdmin(env, sessionToken);
+      return deleteBookingAdmin(env.DB, body.bookingId);
+    case 'getAdminConfig':
+      await requireAdmin(env, sessionToken);
+      return getAdminConfig(env.DB);
+    case 'saveAdminConfig':
+      await requireAdmin(env, sessionToken);
+      return saveAdminConfig(env.DB, body);
     case 'availablePadsForBooking':
       await requireAdmin(env, sessionToken);
       return { pads: await availablePadsForBooking(env.DB, body.bookingId) };
@@ -211,5 +222,8 @@ export default {
       if (err.details) out.details = err.details;
       return json(out, status >= 400 && status < 600 ? status : 500);
     }
+  },
+  async scheduled(event, env, ctx) {
+    kick(ctx, purgeOldClosedBookings(env.DB));
   },
 };

@@ -53,6 +53,8 @@
     adminOverview: 'Hämtar bokningar…',
     listBookings: 'Hämtar bokningar…',
     adminUpdateBooking: 'Sparar bokningen…',
+    deleteBooking: 'Raderar bokningen…',
+    saveAdminConfig: 'Sparar inställningar…',
     availablePadsForBooking: 'Kontrollerar ledig utrustning…',
     listPads: 'Hämtar utrustning…',
     updatePad: 'Sparar pris…',
@@ -161,6 +163,7 @@
       renderRules(res.rules || []);
       renderUsers(res.users || []);
       renderPasses(res.passes || []);
+      renderAdminConfig(res.adminConfig || {});
       return loadTimeline();
     }).catch(function (e) {
       if (e.status === 401) showLogin(true);
@@ -538,6 +541,13 @@
     html += '<p class="ok" id="mailOk" hidden></p>';
     html += '</section>';
 
+    html += '<section class="detail-section detail-section-danger">';
+    html += '<h3>Radera bokning</h3>';
+    html += '<p class="detail-section-lead muted">Tar bort bokningen permanent. Kan inte ångras.</p>';
+    html += '<div class="actions">';
+    html += '<button type="button" class="warn" id="actDelete">Radera bokning</button>';
+    html += '</div></section>';
+
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
 
@@ -626,6 +636,20 @@
     onAct('actReturn', 'return');
     onAct('actPaid', 'setPaid', { paid: !b.paid });
     onAct('actResendMail', 'resendMail');
+    var btnDelete = $('actDelete');
+    if (btnDelete) {
+      btnDelete.onclick = function () {
+        var msg = 'Radera bokning ' + b.bookingNumber + ' permanent? Detta kan inte ångras.';
+        if (!window.confirm(msg)) return;
+        api('deleteBooking', { bookingId: b.id }, btnDelete).then(function () {
+          closeAllModals();
+          return loadBookings();
+        }).catch(function (e) {
+          $('detailErr').hidden = false;
+          $('detailErr').textContent = e.message;
+        });
+      };
+    }
     autoSaveFlag('flagPickup', 'allowSelfPickup');
     autoSaveFlag('flagReturn', 'allowSelfReturn');
 
@@ -845,6 +869,29 @@
       label: $('ruleLabel').value,
       active: true
     }, $('btnAddRule')).then(refreshAll);
+  };
+
+  function renderAdminConfig(cfg) {
+    $('cfgRetentionMonths').value = String(
+      typeof cfg.closedBookingRetentionMonths === 'number'
+        ? cfg.closedBookingRetentionMonths
+        : 6
+    );
+  }
+
+  $('btnSaveConfig').onclick = function () {
+    $('cfgOk').hidden = true;
+    $('cfgErr').hidden = true;
+    api('saveAdminConfig', {
+      closedBookingRetentionMonths: Number($('cfgRetentionMonths').value)
+    }, $('btnSaveConfig')).then(function (res) {
+      renderAdminConfig(res);
+      $('cfgOk').hidden = false;
+      $('cfgOk').textContent = 'Inställningarna är sparade.';
+    }).catch(function (e) {
+      $('cfgErr').hidden = false;
+      $('cfgErr').textContent = e.message;
+    });
   };
 
   function renderUsers(users) {

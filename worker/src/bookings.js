@@ -13,7 +13,7 @@ import {
   kick,
 } from './util.js';
 import { calculatePrice } from './pricing.js';
-import { getConfigMap } from './config.js';
+import { getConfigMap, closedBookingRetentionMonths, CLOSED_BOOKING_STATUSES } from './config.js';
 import { assertPadsAvailable, findUnavailablePads } from './calendar.js';
 import {
   mailBookingCreated,
@@ -594,7 +594,7 @@ export async function listBookingsAdmin(db, query) {
   const status = query && query.status ? String(query.status) : '';
   const doubleOnly = status === 'DoubleBooked';
   const closedOnly = status === 'Closed';
-  const CLOSED_STATUSES = ['Returned', 'Cancelled', 'Rejected'];
+  const CLOSED_FILTER_STATUSES = CLOSED_BOOKING_STATUSES;
 
   const index = await bookingIndex(db);
   const conflicts = computeConflicts(rows, index);
@@ -607,7 +607,7 @@ export async function listBookingsAdmin(db, query) {
     filtered = filtered.filter((b) => b.status === status);
   }
   if (closedOnly) {
-    filtered = filtered.filter((b) => CLOSED_STATUSES.includes(b.status));
+    filtered = filtered.filter((b) => CLOSED_FILTER_STATUSES.includes(b.status));
   }
   filtered.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
@@ -619,6 +619,53 @@ export async function listBookingsAdmin(db, query) {
   });
   if (doubleOnly) list = list.filter((b) => b.doubleBooked);
   return list;
+}
+
+function monthsAgoIso(months) {
+  const d = new Date();
+  d.setUTCMonth(d.getUTCMonth() - months);
+  return d.toISOString();
+}
+
+async function deleteBookingRow(db, bookingId) {
+  const b = await db.prepare(`SELECT status FROM bookings WHERE id = ?`).bind(bookingId).first();
+  if (!b) return;
+  if (BLOCKING_STATUSES[b.status]) {
+    await releasePadLocks(db, bookingId);
+  }
+  await db.prepare(`DELETE FROM door_commands WHERE booking_id = ?`).bind(bookingId).run();
+  await db.prepare(`DELETE FROM bookings WHERE id = ?`).bind(bookingId).run();
+}
+
+/** Remove closed bookings older than the configured retention period. */
+export async function purgeOldClosedBookings(db) {
+  const cfg = await getConfigMap(db);
+  const months = closedBookingRetentionMonths(cfg);
+  if (months === 0) return { deleted: 0, months: 0, disabled: true };
+
+  const cutoff = monthsAgoIso(months);
+  const placeholders = CLOSED_BOOKING_STATUSES.map(() => '?').join(', ');
+  const { results } = await db
+    .prepare(
+      `SELECT id FROM bookings
+       WHERE status IN (${placeholders}) AND updated_at < ?`
+    )
+    .bind(...CLOSED_BOOKING_STATUSES, cutoff)
+    .all();
+
+  let deleted = 0;
+  for (const row of results || []) {
+    await deleteBookingRow(db, row.id);
+    deleted++;
+  }
+  return { deleted, months, cutoff };
+}
+
+export async function deleteBookingAdmin(db, bookingId) {
+  const b = await db.prepare(`SELECT id, booking_number AS bookingNumber, status FROM bookings WHERE id = ?`).bind(bookingId).first();
+  if (!b) throw softError('Bokning saknas', 404);
+  await deleteBookingRow(db, bookingId);
+  return { ok: true, bookingNumber: b.bookingNumber };
 }
 
 export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {

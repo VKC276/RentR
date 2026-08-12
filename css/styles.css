@@ -765,6 +765,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border-top: 1px dashed var(--line);
 }
 .detail-section-foot .actions { margin-top: 0.55rem; }
+.detail-section-danger h3 { color: var(--danger); }
 .detail-section {
   padding: 1rem 0;
   border-bottom: 1px solid var(--line);
