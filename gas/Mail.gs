@@ -220,25 +220,27 @@ function sendRelayMessage_(to, subject, text, html) {
 }
 
 /**
- * Run in the Apps Script editor (Run) to verify Gmail + secret without the Worker.
- * Uses your own Google account email as recipient.
+ * Run in the Apps Script editor to verify Gmail + MAIL_WEBHOOK_SECRET.
+ * Set the recipient below (no Session/userinfo scope needed).
  */
 function testMailRelayInEditor() {
+  var to = 'REPLACE_WITH_YOUR_EMAIL@example.com';
   var secret = PropertiesService.getScriptProperties().getProperty('MAIL_WEBHOOK_SECRET') || '';
   if (!secret) throw new Error('Sätt MAIL_WEBHOOK_SECRET i skriptegenskaper först.');
-  var me = Session.getActiveUser().getEmail();
-  if (!me) throw new Error('Kör som inloggad användare med e-post.');
+  if (!to || to.indexOf('REPLACE_WITH_') === 0) {
+    throw new Error('Sätt din e-post i variabeln to i testMailRelayInEditor.');
+  }
   var result = handleMailRelay_({
     action: 'relayMail',
     secret: secret,
     messages: [{
-      to: me,
+      to: to,
       subject: 'RentR test',
       body: 'Om du läser detta fungerar Gmail-relay från Apps Script.',
       html: '<p>Om du läser detta fungerar <strong>Gmail-relay</strong> från Apps Script.</p>'
     }]
   });
-  Logger.log(JSON.stringify(result.getContent()));
+  Logger.log(result.getContent());
 }
 
 /** Run once in the editor after setting the same secret as the Worker. */

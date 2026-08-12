@@ -45,8 +45,7 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  // Cloudflare Worker posts relayMail here. Handle it before the Sheets API
-  // so a missing spreadsheet cannot block outbound mail.
+  // Mail relay for Cloudflare (action relayMail / ping). Everything else is the legacy API.
   try {
     var peek = {};
     if (e && e.postData && e.postData.contents) {
