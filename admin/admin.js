@@ -68,8 +68,8 @@
     revokeDoorPass: 'Spärrar dörrlänk…'
   };
 
-  function api(action, payload, btn) {
-    var label = BUSY[action] || 'Arbetar…';
+  function api(action, payload, btn, busyLabel) {
+    var label = busyLabel || BUSY[action] || 'Arbetar…';
     var call = Api.call(action, payload || {}, session);
     return btn ? Status.button(btn, label, call) : Status.during(label, call);
   }
@@ -499,7 +499,8 @@
     // would overwrite it, leaving the server with nothing to dispatch on.
     function act(op, extra, btn) {
       var payload = Object.assign({ op: op, bookingId: b.id }, extra || {});
-      api('adminUpdateBooking', payload, btn).then(function (res) {
+      var busy = op === 'resendMail' ? 'Skickar magisk länk…' : null;
+      api('adminUpdateBooking', payload, btn, busy).then(function (res) {
         if (op === 'resendMail') {
           var ok = $('mailOk');
           if (ok) {
