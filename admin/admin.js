@@ -582,7 +582,7 @@
       num: '2',
       title: 'Betalning',
       state: payState,
-      open: !needsApproval && !b.paid && !closed,
+      open: false,
       lead: b.paid ? 'Bokningen är markerad som betald.' : 'Ingen betalning registrerad ännu.',
       body: '<div class="actions"><button type="button" id="actPaid"' + (b.paid ? ' class="ghost"' : '') + '>' +
         (b.paid ? 'Markera som obetald' : 'Markera som betald') + '</button></div>'
@@ -614,7 +614,7 @@
       num: '3',
       title: 'Utlämning',
       state: handState,
-      open: canHandover && (b.status === 'Approved' || b.status === 'HandedOut'),
+      open: false,
       lead: handLead,
       body: handBody
     });
