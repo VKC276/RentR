@@ -215,20 +215,33 @@ function bookingRows(locale, v, { withStatus = false, withTotal = true } = {}) {
 }
 
 /**
- * Apps Script web apps often 302 to googleusercontent and drop the POST body
- * if the client follows redirects automatically. Re-POST manually instead.
+ * Apps Script web apps 302 to googleusercontent and drop the POST body if the
+ * client follows redirects as GET. Re-POST manually, with Content-Length —
+ * the echo host returns 411 without it.
  */
 async function postMailWebhook(url, payload) {
   const body = JSON.stringify(payload);
-  const headers = { 'Content-Type': 'text/plain;charset=utf-8' };
-  let res = await fetch(url, { method: 'POST', headers, body, redirect: 'manual' });
+  const headers = {
+    'Content-Type': 'text/plain;charset=utf-8',
+    'Content-Length': String(new TextEncoder().encode(body).byteLength),
+  };
 
-  if (res.status >= 300 && res.status < 400) {
+  async function post(target) {
+    return fetch(target, { method: 'POST', headers, body, redirect: 'manual' });
+  }
+
+  let res = await post(url);
+  // Follow a short chain of redirects with the same POST body.
+  for (let i = 0; i < 3 && res.status >= 300 && res.status < 400; i++) {
     const loc = res.headers.get('Location');
     if (!loc) {
       throw new Error('Mail-webhook redirect utan Location (' + res.status + ')');
     }
-    res = await fetch(loc, { method: 'POST', headers, body, redirect: 'follow' });
+    res = await post(loc);
+  }
+
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error('Mail-webhook för många redirects');
   }
 
   const text = await res.text();
@@ -240,8 +253,11 @@ async function postMailWebhook(url, payload) {
   }
 
   if (!res.ok) {
+    const snippet = text
+      ? text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180)
+      : '';
     throw new Error(
-      'Mail-webhook HTTP ' + res.status + (text ? ': ' + text.slice(0, 200) : '')
+      'Mail-webhook HTTP ' + res.status + (snippet ? ': ' + snippet : '')
     );
   }
   if (parsed && parsed.error) {
