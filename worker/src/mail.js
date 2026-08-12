@@ -247,6 +247,9 @@ async function postMailWebhook(url, payload) {
   if (parsed && parsed.error) {
     throw new Error('Mail-webhook: ' + parsed.error);
   }
+  if (parsed && parsed.sent === 0) {
+    throw new Error('Mail-webhook: inget mejl skickades');
+  }
   if (parsed && Array.isArray(parsed.errors) && parsed.errors.length) {
     throw new Error('Mail-webhook send errors: ' + parsed.errors.join('; '));
   }

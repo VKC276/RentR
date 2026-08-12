@@ -171,25 +171,74 @@ function handleMailRelay_(body) {
 
   var sent = 0;
   var errors = [];
-  messages.forEach(function (m) {
+  messages.forEach(function (m, idx) {
+    var to = String(m.to || '').trim();
+    var subject = String(m.subject || '');
+    var text = String(m.body || '');
+    var html = m.html ? String(m.html) : '';
+    if (!to || !subject) {
+      errors.push('Meddelande ' + (idx + 1) + ': saknar mottagare eller ämne');
+      return;
+    }
     try {
-      var to = String(m.to || '').trim();
-      var subject = String(m.subject || '');
-      var text = String(m.body || '');
-      var html = m.html ? String(m.html) : '';
-      if (!to || !subject) return;
-      if (html) {
-        GmailApp.sendEmail(to, subject, text, { htmlBody: html, name: 'RentR' });
-      } else {
-        GmailApp.sendEmail(to, subject, text, { name: 'RentR' });
-      }
+      sendRelayMessage_(to, subject, text, html);
       sent++;
     } catch (err) {
-      errors.push(String(err && err.message ? err.message : err));
+      errors.push(to + ': ' + String(err && err.message ? err.message : err));
     }
   });
 
-  return jsonResponse_({ ok: true, sent: sent, errors: errors });
+  if (errors.length) {
+    return jsonResponse_({
+      error: errors.join(' | '),
+      ok: false,
+      sent: sent,
+      errors: errors,
+      status: 500
+    }, 500);
+  }
+  return jsonResponse_({ ok: true, sent: sent, errors: [] });
+}
+
+/** Send one relay message; retry without HTML if the HTML send fails. */
+function sendRelayMessage_(to, subject, text, html) {
+  if (!text) text = subject;
+  try {
+    if (html) {
+      GmailApp.sendEmail(to, subject, text, { htmlBody: html });
+    } else {
+      GmailApp.sendEmail(to, subject, text);
+    }
+  } catch (err) {
+    // Some accounts reject htmlBody or optional sender fields — fall back to plain text.
+    if (html) {
+      GmailApp.sendEmail(to, subject, text);
+      return;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Run in the Apps Script editor (Run) to verify Gmail + secret without the Worker.
+ * Uses your own Google account email as recipient.
+ */
+function testMailRelayInEditor() {
+  var secret = PropertiesService.getScriptProperties().getProperty('MAIL_WEBHOOK_SECRET') || '';
+  if (!secret) throw new Error('Sätt MAIL_WEBHOOK_SECRET i skriptegenskaper först.');
+  var me = Session.getActiveUser().getEmail();
+  if (!me) throw new Error('Kör som inloggad användare med e-post.');
+  var result = handleMailRelay_({
+    action: 'relayMail',
+    secret: secret,
+    messages: [{
+      to: me,
+      subject: 'RentR test',
+      body: 'Om du läser detta fungerar Gmail-relay från Apps Script.',
+      html: '<p>Om du läser detta fungerar <strong>Gmail-relay</strong> från Apps Script.</p>'
+    }]
+  });
+  Logger.log(JSON.stringify(result.getContent()));
 }
 
 /** Run once in the editor after setting the same secret as the Worker. */

@@ -41,27 +41,52 @@ function handleRelay_(e) {
 
     var sent = 0;
     var errors = [];
-    messages.forEach(function (m) {
+    messages.forEach(function (m, idx) {
+      var to = String(m.to || '').trim();
+      var subject = String(m.subject || '');
+      var text = String(m.body || '');
+      var html = m.html ? String(m.html) : '';
+      if (!to || !subject) {
+        errors.push('Meddelande ' + (idx + 1) + ': saknar mottagare eller ämne');
+        return;
+      }
       try {
-        var to = String(m.to || '').trim();
-        var subject = String(m.subject || '');
-        var text = String(m.body || '');
-        var html = m.html ? String(m.html) : '';
-        if (!to || !subject) return;
-        if (html) {
-          GmailApp.sendEmail(to, subject, text, { htmlBody: html, name: 'RentR' });
-        } else {
-          GmailApp.sendEmail(to, subject, text, { name: 'RentR' });
-        }
+        sendRelayMessage_(to, subject, text, html);
         sent++;
       } catch (err) {
-        errors.push(String(err && err.message ? err.message : err));
+        errors.push(to + ': ' + String(err && err.message ? err.message : err));
       }
     });
 
-    return jsonOut_({ ok: true, sent: sent, errors: errors });
+    if (errors.length) {
+      return jsonOut_({
+        error: errors.join(' | '),
+        ok: false,
+        sent: sent,
+        errors: errors,
+        status: 500
+      }, 500);
+    }
+    return jsonOut_({ ok: true, sent: sent, errors: [] });
   } catch (err) {
     return jsonOut_({ error: String(err && err.message ? err.message : err), status: 500 }, 500);
+  }
+}
+
+function sendRelayMessage_(to, subject, text, html) {
+  if (!text) text = subject;
+  try {
+    if (html) {
+      GmailApp.sendEmail(to, subject, text, { htmlBody: html });
+    } else {
+      GmailApp.sendEmail(to, subject, text);
+    }
+  } catch (err) {
+    if (html) {
+      GmailApp.sendEmail(to, subject, text);
+      return;
+    }
+    throw err;
   }
 }
 
@@ -77,4 +102,13 @@ function setMailWebhookSecret() {
   var secret = 'REPLACE_WITH_A_LONG_RANDOM_STRING';
   PropertiesService.getScriptProperties().setProperty('MAIL_WEBHOOK_SECRET', secret);
   Logger.log('MAIL_WEBHOOK_SECRET sparad.');
+}
+
+function testMailRelayInEditor() {
+  var secret = PropertiesService.getScriptProperties().getProperty('MAIL_WEBHOOK_SECRET') || '';
+  if (!secret) throw new Error('Sätt MAIL_WEBHOOK_SECRET i skriptegenskaper först.');
+  var me = Session.getActiveUser().getEmail();
+  if (!me) throw new Error('Kör som inloggad användare med e-post.');
+  sendRelayMessage_(me, 'RentR test', 'Gmail-relay fungerar.', '<p><strong>Gmail-relay</strong> fungerar.</p>');
+  Logger.log('Testmejl skickat till ' + me);
 }

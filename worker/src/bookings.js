@@ -777,12 +777,19 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
   } else if (action === 'resendMail') {
     const magic = await createMagicToken(db, bookingId);
     // Await so admin sees success/failure instead of a silent background send.
-    if (booking.status === 'Cancelled') {
-      await mailGuestCancelled(env, booking, magic);
-    } else if (booking.status === 'Requested') {
-      await mailBookingCreated(env, booking, magic);
-    } else {
-      await mailGuestStatus(env, booking, magic);
+    try {
+      if (booking.status === 'Cancelled') {
+        await mailGuestCancelled(env, booking, magic);
+      } else if (booking.status === 'Requested') {
+        await mailBookingCreated(env, booking, magic);
+      } else {
+        await mailGuestStatus(env, booking, magic);
+      }
+    } catch (err) {
+      throw softError(
+        'Mejl misslyckades: ' + String(err && err.message ? err.message : err),
+        502
+      );
     }
     return { booking, mailSent: true, mailTo: booking.email };
   }
