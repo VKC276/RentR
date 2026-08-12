@@ -5,23 +5,31 @@
  * Script property MAIL_WEBHOOK_SECRET must match Worker MAIL_WEBHOOK_SECRET.
  */
 
+function mailJson_(obj, status) {
+  var out = obj || {};
+  if (status && !out.status) out.status = status;
+  return ContentService
+    .createTextOutput(JSON.stringify(out))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function handleMailRelay_(body) {
   body = body || {};
   if (body.action === 'ping' || !body.action) {
-    return jsonResponse_({ ok: true, service: 'rentr-mail' });
+    return mailJson_({ ok: true, service: 'rentr-mail' });
   }
   if (body.action !== 'relayMail') {
-    return jsonResponse_({ error: 'Endast relayMail stöds', status: 400 }, 400);
+    return mailJson_({ error: 'Endast relayMail stöds', status: 400 }, 400);
   }
 
   var expected = PropertiesService.getScriptProperties().getProperty('MAIL_WEBHOOK_SECRET') || '';
   if (!expected || body.secret !== expected) {
-    return jsonResponse_({ error: 'Unauthorized', status: 401 }, 401);
+    return mailJson_({ error: 'Unauthorized', status: 401 }, 401);
   }
 
   var messages = body.messages || [];
   if (!Array.isArray(messages) || !messages.length) {
-    return jsonResponse_({ error: 'Inga meddelanden', status: 400 }, 400);
+    return mailJson_({ error: 'Inga meddelanden', status: 400 }, 400);
   }
 
   var sent = 0;
@@ -44,7 +52,7 @@ function handleMailRelay_(body) {
   });
 
   if (errors.length) {
-    return jsonResponse_({
+    return mailJson_({
       error: errors.join(' | '),
       ok: false,
       sent: sent,
@@ -52,7 +60,7 @@ function handleMailRelay_(body) {
       status: 500
     }, 500);
   }
-  return jsonResponse_({ ok: true, sent: sent, errors: [] });
+  return mailJson_({ ok: true, sent: sent, errors: [] });
 }
 
 function sendRelayMessage_(to, subject, text, html) {
