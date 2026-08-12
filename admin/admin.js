@@ -92,11 +92,13 @@
     if (!user) {
       el.hidden = true;
       el.textContent = '';
+      el.removeAttribute('title');
       return;
     }
     var name = ((user.firstName || '') + ' ' + (user.lastName || '')).trim();
-    el.textContent = name ? name + ' · ' + user.email : user.email;
-    el.hidden = false;
+    el.textContent = name || user.email || '';
+    el.title = user.email || '';
+    el.hidden = !el.textContent;
   }
 
   var VIEWS = { bookings: true, doorpass: true, settings: true };

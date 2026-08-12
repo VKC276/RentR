@@ -1038,6 +1038,9 @@ button.ghost.is-busy .status-spinner {
 .admin-user {
   font-size: 0.9rem;
   font-weight: 600;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .settings-panel .settings-block {
@@ -1074,7 +1077,15 @@ button.ghost.is-busy .status-spinner {
   border-top: 1px solid var(--line);
 }
 .settings-block-body h3:first-child { margin-top: 0.85rem; }
-.topbar-right { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.topbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
+}
 .nav { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .nav a {
   padding: 0.4rem 0.7rem;
