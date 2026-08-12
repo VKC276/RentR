@@ -930,7 +930,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .booking-chapter.self-service {
   border-color: rgba(13, 110, 110, 0.28);
-  box-shadow: inset 3px 0 0 var(--accent);
 }
 .door-block { margin-top: 1.25rem; }
 .door-hint { margin: 0 0 0.55rem; }
