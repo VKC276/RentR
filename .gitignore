@@ -1,4 +1,4 @@
-js/config.local.js
+.js/config.local.js
 .env
 .env.local
 .dev.vars
@@ -11,3 +11,5 @@ __pycache__/
 node_modules/
 .wrangler/
 .clasp.json
+mail-probe-out.txt
+pi/.env

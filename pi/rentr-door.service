@@ -1,0 +1,18 @@
+[Unit]
+Description=VKK Rental door relay listener
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# install.sh rewrites User/paths for the installing account.
+User=pi
+WorkingDirectory=/home/pi/RentR/pi
+EnvironmentFile=-/etc/rentr-door.env
+Environment=ENV_FILE=/etc/rentr-door.env
+ExecStart=/home/pi/RentR/pi/.venv/bin/python /home/pi/RentR/pi/door_listener.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,91 +1,180 @@
 #!/usr/bin/env python3
 """
-Poll GAS for pending Open Door commands and pulse a GPIO relay.
+VKK Rental — poll Cloudflare Worker for Open door commands and pulse a 5V relay.
 
-Setup:
-  pip install -r requirements.txt
-  export GAS_URL="https://script.google.com/macros/s/.../exec"
-  export PI_API_KEY="same-as-script-property"
-  # optional: GPIO_PIN=17 RELAY_ACTIVE_HIGH=0 PULSE_MS=1000
+Designed for Raspberry Pi 5 + Pi OS (gpiozero / lgpio). Falls back to dry-run
+when GPIO libraries are missing (useful on a laptop while testing the API).
+
+Required env:
+  API_URL      https://rentr-api.muddy-rice-38d4.workers.dev
+  PI_API_KEY   same value as Worker secret DOOR_API_KEY
+
+Optional env:
+  GPIO_PIN=17
+  RELAY_ACTIVE_HIGH=0   # 0 = active-low (most 5V relay boards)
+  PULSE_MS=1000         # fallback if Worker omits pulseMs
+  POLL_SEC=2.5
+  ENV_FILE=/etc/rentr-door.env
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 import time
-import urllib.parse
+import urllib.error
 import urllib.request
+from pathlib import Path
 
 try:
-    import RPi.GPIO as GPIO  # type: ignore
+    from gpiozero import DigitalOutputDevice  # type: ignore
+
     HAS_GPIO = True
 except ImportError:
+    DigitalOutputDevice = None  # type: ignore
     HAS_GPIO = False
 
 
-GAS_URL = os.environ.get("GAS_URL", "").rstrip("/")
-API_KEY = os.environ.get("PI_API_KEY", "")
+DEFAULT_API_URL = "https://rentr-api.muddy-rice-38d4.workers.dev"
+USER_AGENT = "VKK-Rental-Pi/2.0"
+
+
+def load_env_file(path: str | Path) -> None:
+    """Load KEY=VALUE lines into os.environ if the key is not already set."""
+    p = Path(path)
+    if not p.is_file():
+        return
+    for raw in p.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def bootstrap_env() -> None:
+    explicit = os.environ.get("ENV_FILE", "").strip()
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+    candidates.append(Path(__file__).resolve().parent / ".env")
+    candidates.append("/etc/rentr-door.env")
+    for c in candidates:
+        load_env_file(c)
+
+
+def env_bool(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "on")
+
+
+bootstrap_env()
+
+API_URL = os.environ.get("API_URL", DEFAULT_API_URL).rstrip("/")
+API_KEY = os.environ.get("PI_API_KEY", "").strip()
 GPIO_PIN = int(os.environ.get("GPIO_PIN", "17"))
-RELAY_ACTIVE_HIGH = os.environ.get("RELAY_ACTIVE_HIGH", "0") == "1"
+RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "0")
 DEFAULT_PULSE_MS = int(os.environ.get("PULSE_MS", "1000"))
 POLL_SEC = float(os.environ.get("POLL_SEC", "2.5"))
 
 
-def gas_get(action: str, **params):
-    """GET /exec — follows Google's security redirect to googleusercontent.com."""
-    q = {"action": action, "apiKey": API_KEY}
-    q.update({k: v for k, v in params.items() if v is not None})
-    url = GAS_URL + "?" + urllib.parse.urlencode(q)
-    req = urllib.request.Request(url, headers={"User-Agent": "RentR-Pi/1.0"})
-    # urlopen follows redirects by default (script.google.com → googleusercontent.com)
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+def api_call(action: str, **extra):
+    """POST JSON to the Worker (same contract as the web client)."""
+    payload = {"action": action, "apiKey": API_KEY}
+    payload.update({k: v for k, v in extra.items() if v is not None})
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        API_URL,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": USER_AGENT,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {detail or exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Network error: {exc.reason}") from exc
+
+    data = json.loads(raw) if raw else {}
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(str(data.get("error")))
+    return data
 
 
-def pulse_relay(pulse_ms: int) -> None:
-    if not HAS_GPIO:
-        print(f"[dry-run] pulse {pulse_ms}ms on pin {GPIO_PIN}")
-        time.sleep(pulse_ms / 1000.0)
-        return
-    on = GPIO.HIGH if RELAY_ACTIVE_HIGH else GPIO.LOW
-    off = GPIO.LOW if RELAY_ACTIVE_HIGH else GPIO.HIGH
-    GPIO.output(GPIO_PIN, on)
-    time.sleep(pulse_ms / 1000.0)
-    GPIO.output(GPIO_PIN, off)
+class Relay:
+    def __init__(self) -> None:
+        self._dev = None
+        if HAS_GPIO:
+            self._dev = DigitalOutputDevice(
+                GPIO_PIN,
+                active_high=RELAY_ACTIVE_HIGH,
+                initial_value=False,
+            )
+            mode = "active-high" if RELAY_ACTIVE_HIGH else "active-low"
+            print(f"GPIO ready on BCM{GPIO_PIN} ({mode})")
+        else:
+            print("gpiozero not available — dry-run mode (no hardware pulse)")
+
+    def pulse(self, pulse_ms: int) -> None:
+        ms = max(50, int(pulse_ms))
+        if self._dev is None:
+            print(f"[dry-run] pulse {ms}ms on BCM{GPIO_PIN}")
+            time.sleep(ms / 1000.0)
+            return
+        self._dev.on()
+        try:
+            time.sleep(ms / 1000.0)
+        finally:
+            self._dev.off()
+
+    def close(self) -> None:
+        if self._dev is not None:
+            self._dev.close()
+            self._dev = None
 
 
 def main() -> None:
-    if not GAS_URL or not API_KEY:
-        raise SystemExit("Set GAS_URL and PI_API_KEY environment variables")
+    if not API_KEY:
+        raise SystemExit(
+            "Sätt PI_API_KEY (samma värde som Worker-secret DOOR_API_KEY).\n"
+            "Exempel: export PI_API_KEY=… eller /etc/rentr-door.env"
+        )
+    if not API_URL:
+        raise SystemExit("Sätt API_URL till Worker-URL:en")
 
-    if HAS_GPIO:
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(GPIO_PIN, GPIO.OUT)
-        idle = GPIO.LOW if RELAY_ACTIVE_HIGH else GPIO.HIGH
-        GPIO.output(GPIO_PIN, idle)
-        print(f"GPIO ready on BCM{GPIO_PIN}")
-    else:
-        print("RPi.GPIO not available — dry-run mode")
+    print(f"API {API_URL}")
+    print(f"Poll every {POLL_SEC}s · fallback pulse {DEFAULT_PULSE_MS}ms")
+    relay = Relay()
+    print("Listening for Open door…")
 
-    print("Polling for door commands…")
     try:
         while True:
             try:
-                data = gas_get("pollDoor")
-                cmd = data.get("command")
+                data = api_call("pollDoor")
+                cmd = data.get("command") if isinstance(data, dict) else None
                 if cmd:
+                    cmd_id = cmd.get("id")
                     pulse = int(cmd.get("pulseMs") or DEFAULT_PULSE_MS)
-                    print(f"Open door command {cmd.get('id')} pulse={pulse}ms")
-                    pulse_relay(pulse)
-                    gas_get("completeDoor", commandId=cmd.get("id"))
-                    print("Marked done")
+                    print(f"Command {cmd_id} → pulse {pulse}ms")
+                    relay.pulse(pulse)
+                    api_call("completeDoor", commandId=cmd_id)
+                    print(f"Command {cmd_id} marked done")
             except Exception as exc:  # noqa: BLE001
-                print(f"Poll error: {exc}")
+                print(f"Poll error: {exc}", file=sys.stderr)
             time.sleep(POLL_SEC)
+    except KeyboardInterrupt:
+        print("\nStopped")
     finally:
-        if HAS_GPIO:
-            GPIO.cleanup()
+        relay.close()
 
 
 if __name__ == "__main__":
