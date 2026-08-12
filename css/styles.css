@@ -945,6 +945,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   margin: 0 0 0.45rem;
   font-size: 1rem;
 }
+.door-validity { margin: 0.35rem 0 0; }
+.door-validity-dates,
+.door-validity-hours {
+  margin: 0;
+  line-height: 1.35;
+}
+.door-validity-hours { margin-top: 0.15rem; }
+.door-validity-hint {
+  margin: 0.65rem 0 0;
+  max-width: 28rem;
+}
+.self-service-block .door-validity { margin: 0; }
+.self-service-block .door-block { margin-top: 0.85rem; }
 .door-block { margin-top: 1.25rem; }
 .door-hint { margin: 0 0 0.55rem; }
 .door-steps {

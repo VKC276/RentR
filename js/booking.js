@@ -28,22 +28,30 @@
     var date = (section && section.date) || '';
     var startTime = (section && section.startTime) || '06:00';
     var endTime = (section && section.endTime) || '22:00';
-    var hoursLabel = I18n.t('selfServiceHours', { start: startTime, end: endTime });
+    var suffix = kind === 'pickup' ? 'Pickup' : 'Return';
+
+    function validityBlock(extraHint) {
+      var out = '<div class="door-validity">';
+      if (date) {
+        out += '<p class="door-validity-dates">' + I18n.t('doorValid') + ': <strong>' +
+          escapeHtml(date) + '</strong></p>';
+      }
+      out += '<p class="door-validity-hours"><strong>' +
+        escapeHtml(I18n.t('selfServiceHours', { start: startTime, end: endTime })) +
+        '</strong></p>';
+      if (extraHint) {
+        out += '<p class="muted door-validity-hint">' + escapeHtml(extraHint) + '</p>';
+      }
+      out += '</div>';
+      return out;
+    }
 
     if (phase === 'notAllowed') {
       html += '<p class="muted">' + escapeHtml(I18n.t('selfServiceNotAvailable')) + '</p>';
     } else if (phase === 'upcoming') {
-      html += '<p class="muted">' + escapeHtml(
-        kind === 'pickup'
-          ? I18n.t('selfServicePickupActivates', { date: date })
-          : I18n.t('selfServiceReturnActivates', { date: date })
-      ) + '</p>';
-      html += '<p class="muted">' + escapeHtml(hoursLabel) + '</p>';
+      html += validityBlock(I18n.t('doorPassValidHint'));
     } else if (phase === 'outsideHours') {
-      html += '<p class="muted">' + escapeHtml(I18n.t('selfServiceOutsideHours', {
-        start: startTime,
-        end: endTime
-      })) + '</p>';
+      html += validityBlock(I18n.t('selfServiceOutsideHours'));
     } else if (phase === 'passed') {
       html += '<p class="muted">' + escapeHtml(
         kind === 'pickup'
@@ -57,24 +65,23 @@
           : I18n.t('doorStateReturned')
       ) + '</p>';
     } else if (phase === 'active' || phase === 'confirm') {
-      html += '<p class="muted">' + escapeHtml(hoursLabel) + '</p>';
-      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepOpen')) + '</p>';
+      html += validityBlock(
+        kind === 'pickup'
+          ? I18n.t('selfServicePickupExplain')
+          : I18n.t('selfServiceReturnExplain')
+      );
+      html += '<div class="door-block">';
       html += '<div class="door-row">';
-      html += '<button type="button" id="btnDoor' + (kind === 'pickup' ? 'Pickup' : 'Return') + '">' +
+      html += '<button type="button" id="btnDoor' + suffix + '">' +
         I18n.t('openDoor') + '</button>';
       html += '</div>';
       if (phase === 'confirm' || (section && section.showConfirm)) {
-        html += '<p class="door-steps">' + escapeHtml(
-          kind === 'pickup'
-            ? I18n.t('selfServiceStepConfirmPickup')
-            : I18n.t('selfServiceStepConfirmReturn')
-        ) + '</p>';
-        html += '<div class="door-row">';
-        html += '<button type="button" class="warn" id="btnConfirm' +
-          (kind === 'pickup' ? 'Pickup' : 'Return') + '">' +
+        html += '<div class="door-row" style="margin-top:0.65rem;">';
+        html += '<button type="button" class="warn" id="btnConfirm' + suffix + '">' +
           I18n.t(kind === 'pickup' ? 'confirmPickup' : 'confirmReturn') + '</button>';
         html += '</div>';
       }
+      html += '</div>';
     } else {
       html += '<p class="muted">' + escapeHtml(I18n.t('selfServiceNotAvailable')) + '</p>';
     }

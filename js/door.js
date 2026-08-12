@@ -37,20 +37,23 @@
   }
 
   function render() {
+    var startT = pass.startTime || '06:00';
+    var endT = pass.endTime || '22:00';
     var html = '';
     html += '<h1>' + escapeHtml(pass.recipientName) + '</h1>';
-    html += '<p class="muted">' + I18n.t('doorValid') + ': <strong>' +
+    html += '<div class="door-validity">';
+    html += '<p class="door-validity-dates">' + I18n.t('doorValid') + ': <strong>' +
       escapeHtml(pass.startDate) + ' – ' + escapeHtml(pass.endDate) + '</strong></p>';
-    html += '<p class="muted">' + escapeHtml(I18n.t('doorPassHours', {
-      start: pass.startTime || '06:00',
-      end: pass.endTime || '22:00'
-    })) + '</p>';
-    html += '<p class="muted">' + I18n.t('doorPassValidHint') + '</p>';
+    html += '<p class="door-validity-hours"><strong>' +
+      escapeHtml(I18n.t('doorPassHours', { start: startT, end: endT })) +
+      '</strong></p>';
+    html += '<p class="muted door-validity-hint">' +
+      escapeHtml(I18n.t('doorPassValidHint')) + '</p>';
+    html += '</div>';
 
     if (pass.doorUi || pass.showOpenDoor || pass.doorState) {
       var enabled = !!pass.showOpenDoor;
       html += '<div class="door-block">';
-      html += '<p class="muted door-hint">' + escapeHtml(I18n.t('openDoorPassHint')) + '</p>';
       html += '<div class="door-row">';
       html += '<button type="button" id="btnDoor" style="font-size:1.15rem;padding:1rem 1.5rem;"' +
         (enabled ? '' : ' disabled') + '>' + I18n.t('openDoor') + '</button>';
