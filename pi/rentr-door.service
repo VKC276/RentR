@@ -5,12 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# install.sh rewrites User/paths for the installing account.
-User=pi
-WorkingDirectory=/home/pi/RentR/pi
-EnvironmentFile=-/etc/rentr-door.env
+User=vkc
+Group=vkc
+WorkingDirectory=/home/vkc/RentR/pi
 Environment=ENV_FILE=/etc/rentr-door.env
-ExecStart=/home/pi/RentR/pi/.venv/bin/python /home/pi/RentR/pi/door_listener.py
+ExecStart=/home/vkc/RentR/pi/.venv/bin/python /home/vkc/RentR/pi/door_listener.py
 Restart=always
 RestartSec=5
 

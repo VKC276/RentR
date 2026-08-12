@@ -90,7 +90,8 @@ Type=simple
 User=${USER_NAME}
 Group=${USER_NAME}
 WorkingDirectory=${DIR}
-EnvironmentFile=-${ENV_FILE}
+# Do not use EnvironmentFile for the secret — systemd can mangle values.
+# Python reads ENV_FILE itself.
 Environment=ENV_FILE=${ENV_FILE}
 ExecStart=${VENV}/bin/python ${DIR}/door_listener.py
 Restart=always
@@ -103,12 +104,14 @@ EOF
 sudo systemctl daemon-reload
 
 if [[ "$ENABLE_SERVICE" -eq 1 ]]; then
-  echo "==> Enabling and starting ${SERVICE_NAME}"
-  sudo systemctl enable --now "$SERVICE_NAME"
+  echo "==> Enabling and restarting ${SERVICE_NAME}"
+  sudo systemctl enable "$SERVICE_NAME"
+  sudo systemctl restart "$SERVICE_NAME"
   sudo systemctl --no-pager --full status "$SERVICE_NAME" || true
 else
   echo "==> Service installed but not started"
   echo "    Start:   sudo systemctl enable --now ${SERVICE_NAME}"
+  echo "    Restart: sudo systemctl restart ${SERVICE_NAME}"
   echo "    Logs:    sudo journalctl -u ${SERVICE_NAME} -f"
 fi
 
