@@ -25,42 +25,40 @@
   }
 
   function renderDoorControls(od) {
+    if (!od.showConfirmPickup && !od.showConfirmReturn && !od.doorUi) return '';
+
+    var mode = od.mode || (od.showConfirmPickup ? 'pickup' : (od.showConfirmReturn ? 'return' : ''));
+    var lead = '';
+    if (mode === 'pickup' || od.showConfirmPickup) lead = I18n.t('selfServicePickupExplain');
+    else if (mode === 'return' || od.showConfirmReturn) lead = I18n.t('selfServiceReturnExplain');
+    else lead = I18n.t('openDoorHint');
+
+    var html = '<section class="booking-chapter self-service">';
+    html += '<h2>' + escapeHtml(I18n.t('selfServiceTitle')) + '</h2>';
+    html += '<p class="muted chapter-lead">' + escapeHtml(lead) + '</p>';
+
     if (od.showConfirmPickup) {
-      return '<div class="door-block door-confirm">' +
-        '<p class="door-steps"><strong>2 / 2</strong> — ' + escapeHtml(I18n.t('confirmPickupHint')) + '</p>' +
-        '<p class="muted door-hint">' + escapeHtml(I18n.t('selfServicePickupExplain')) + '</p>' +
-        '<p><button type="button" class="warn" id="btnConfirmPickup">' + I18n.t('confirmPickup') + '</button></p>' +
-        '</div>';
+      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepConfirmPickup')) + '</p>';
+      html += '<div class="door-row">';
+      html += '<button type="button" class="warn" id="btnConfirmPickup">' + I18n.t('confirmPickup') + '</button>';
+      html += '</div>';
+    } else if (od.showConfirmReturn) {
+      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepConfirmReturn')) + '</p>';
+      html += '<div class="door-row">';
+      html += '<button type="button" class="warn" id="btnConfirmReturn">' + I18n.t('confirmReturn') + '</button>';
+      html += '</div>';
+    } else {
+      var enabled = !!od.showOpenDoor;
+      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepOpen')) + '</p>';
+      html += '<div class="door-row">';
+      html += '<button type="button" id="btnDoor"' + (enabled ? '' : ' disabled') + '>' +
+        I18n.t('openDoor') + '</button>';
+      html += '<span class="door-state' + (enabled ? ' is-active' : '') + '">' +
+        escapeHtml(doorStateLabel(od)) + '</span>';
+      html += '</div>';
     }
-    if (od.showConfirmReturn) {
-      return '<div class="door-block door-confirm">' +
-        '<p class="door-steps"><strong>2 / 2</strong> — ' + escapeHtml(I18n.t('confirmReturnHint')) + '</p>' +
-        '<p class="muted door-hint">' + escapeHtml(I18n.t('selfServiceReturnExplain')) + '</p>' +
-        '<p><button type="button" class="warn" id="btnConfirmReturn">' + I18n.t('confirmReturn') + '</button></p>' +
-        '</div>';
-    }
-    if (!od.doorUi) return '';
 
-    var enabled = !!od.showOpenDoor;
-    var modeHint = '';
-    if (od.mode === 'pickup') modeHint = I18n.t('selfServicePickupExplain');
-    else if (od.mode === 'return') modeHint = I18n.t('selfServiceReturnExplain');
-    else modeHint = I18n.t('openDoorHint');
-
-    var step = enabled
-      ? '<p class="door-steps"><strong>1 / 2</strong> — ' + escapeHtml(I18n.t('openDoorStepHint')) + '</p>'
-      : '';
-
-    var html = '';
-    html += '<div class="door-block">';
-    html += step;
-    html += '<p class="muted door-hint">' + escapeHtml(modeHint) + '</p>';
-    html += '<div class="door-row">';
-    html += '<button type="button" id="btnDoor"' + (enabled ? '' : ' disabled') + '>' +
-      I18n.t('openDoor') + '</button>';
-    html += '<span class="door-state' + (enabled ? ' is-active' : '') + '">' +
-      escapeHtml(doorStateLabel(od)) + '</span>';
-    html += '</div></div>';
+    html += '</section>';
     return html;
   }
 

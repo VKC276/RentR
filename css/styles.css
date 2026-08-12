@@ -914,9 +914,30 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.02);
 }
+.booking-chapter {
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+.booking-chapter h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.1rem;
+}
+.booking-chapter .chapter-lead {
+  margin: 0 0 0.85rem;
+}
+.booking-chapter.self-service {
+  border-color: rgba(13, 110, 110, 0.28);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 .door-block { margin-top: 1.25rem; }
 .door-hint { margin: 0 0 0.55rem; }
-.door-steps { margin: 0 0 0.45rem; }
+.door-steps {
+  margin: 0 0 0.65rem;
+  font-weight: 600;
+}
 .door-confirm {
   padding: 0.9rem 1rem;
   border: 1px solid var(--line);
