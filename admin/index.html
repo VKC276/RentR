@@ -86,67 +86,79 @@
       </div>
 
       <div class="admin-view" id="settingsView" data-view="settings" hidden>
-      <div class="panel" id="systemSection">
-        <h2>System</h2>
-        <h3>Autorensning</h3>
-        <p class="muted">Avslutade bokningar (återlämnade, avbokade, avslagna) raderas automatiskt efter angiven tid. Autorensning körs dagligen och när admin öppnas.</p>
-        <div class="row">
-          <div><label>Behåll avslutade (månader)</label><input id="cfgRetentionMonths" type="number" min="0" max="120" step="1" value="6" /></div>
-        </div>
-        <p class="muted">Sätt till 0 för att stänga av autorensning.</p>
-        <p><button type="button" id="btnSaveConfig">Spara</button></p>
-        <p class="ok" id="cfgOk" hidden></p>
-        <p class="err" id="cfgErr" hidden></p>
-      </div>
-      <div class="panel" id="pricingSection">
-        <h2>Priser & rabatter</h2>
-        <h3>Utrustning</h3>
-        <div class="pad-list" id="padsList"></div>
-        <h3>Ny utrustning</h3>
-        <div class="row">
-          <div><label>Namn</label><input id="padName" placeholder="Crashpad 13" /></div>
-          <div><label>Beskrivning</label><input id="padDesc" placeholder="Valfritt" /></div>
-          <div><label>Pris/dygn</label><input id="padPrice" type="number" min="0" step="1" value="150" /></div>
-        </div>
-        <p><button type="button" id="btnCreatePad">Lägg till utrustning</button></p>
-        <p class="err" id="padErr" hidden></p>
-        <h3>Rabattstege</h3>
-        <div id="rulesList"></div>
-        <div class="row">
-          <div>
-            <label>Dimension</label>
-            <select id="ruleDim"><option value="days">days</option><option value="pads">pads</option></select>
-          </div>
-          <div><label>Min</label><input id="ruleMin" type="number" value="3" /></div>
-          <div><label>% rabatt</label><input id="rulePct" type="number" value="10" /></div>
-          <div><label>Label</label><input id="ruleLabel" value="Ny regel" /></div>
-        </div>
-        <p><button type="button" id="btnAddRule">Lägg till regel</button></p>
-      </div>
+      <div class="panel settings-panel">
+        <h2>Inställningar</h2>
+        <p class="muted">Öppna ett avsnitt i taget. System, priser och användare hålls åtskilda.</p>
 
-      <div class="panel" id="usersSection">
-        <h2>Användare</h2>
-        <h3>Mitt konto</h3>
-        <p class="muted">Byt lösenord för ditt inloggade konto. Du förblir inloggad efter bytet.</p>
-        <div class="row">
-          <div><label>Nuvarande lösenord</label><input id="pwCurrent" type="password" autocomplete="current-password" /></div>
-          <div><label>Nytt lösenord</label><input id="pwNew" type="password" autocomplete="new-password" /></div>
-          <div><label>Bekräfta nytt lösenord</label><input id="pwConfirm" type="password" autocomplete="new-password" /></div>
-        </div>
-        <p><button type="button" id="btnChangePassword">Byt lösenord</button></p>
-        <p class="ok" id="pwOk" hidden></p>
-        <p class="err" id="pwErr" hidden></p>
-        <h3>Alla administratörer</h3>
-        <div id="usersList"></div>
-        <h3>Ny admin</h3>
-        <div class="row">
-          <div><label>Förnamn</label><input id="uFirst" /></div>
-          <div><label>Efternamn</label><input id="uLast" /></div>
-          <div><label>E-post</label><input id="uEmail" type="email" /></div>
-          <div><label>Lösenord</label><input id="uPass" type="password" /></div>
-        </div>
-        <p><button type="button" id="btnCreateUser">Skapa</button></p>
-        <p class="err" id="userErr" hidden></p>
+        <details class="settings-block" open>
+          <summary>System</summary>
+          <div class="settings-block-body">
+            <h3>Autorensning</h3>
+            <p class="muted">Avslutade bokningar (återlämnade, avbokade, avslagna) raderas automatiskt efter angiven tid. Autorensning körs dagligen och när admin öppnas.</p>
+            <div class="row">
+              <div><label>Behåll avslutade (månader)</label><input id="cfgRetentionMonths" type="number" min="0" max="120" step="1" value="6" /></div>
+            </div>
+            <p class="muted">Sätt till 0 för att stänga av autorensning.</p>
+            <p><button type="button" id="btnSaveConfig">Spara</button></p>
+            <p class="ok" id="cfgOk" hidden></p>
+            <p class="err" id="cfgErr" hidden></p>
+          </div>
+        </details>
+
+        <details class="settings-block" id="pricingSection">
+          <summary>Priser &amp; utrustning</summary>
+          <div class="settings-block-body">
+            <h3>Utrustning</h3>
+            <div class="pad-list" id="padsList"></div>
+            <h3>Ny utrustning</h3>
+            <div class="row">
+              <div><label>Namn</label><input id="padName" placeholder="Crashpad 13" /></div>
+              <div><label>Beskrivning</label><input id="padDesc" placeholder="Valfritt" /></div>
+              <div><label>Pris/dygn</label><input id="padPrice" type="number" min="0" step="1" value="150" /></div>
+            </div>
+            <p><button type="button" id="btnCreatePad">Lägg till utrustning</button></p>
+            <p class="err" id="padErr" hidden></p>
+            <h3>Rabattstege</h3>
+            <div id="rulesList"></div>
+            <div class="row">
+              <div>
+                <label>Dimension</label>
+                <select id="ruleDim"><option value="days">days</option><option value="pads">pads</option></select>
+              </div>
+              <div><label>Min</label><input id="ruleMin" type="number" value="3" /></div>
+              <div><label>% rabatt</label><input id="rulePct" type="number" value="10" /></div>
+              <div><label>Label</label><input id="ruleLabel" value="Ny regel" /></div>
+            </div>
+            <p><button type="button" id="btnAddRule">Lägg till regel</button></p>
+          </div>
+        </details>
+
+        <details class="settings-block" id="usersSection">
+          <summary>Användare</summary>
+          <div class="settings-block-body">
+            <h3>Mitt konto</h3>
+            <p class="muted">Byt lösenord för ditt inloggade konto. Du förblir inloggad efter bytet.</p>
+            <div class="row">
+              <div><label>Nuvarande lösenord</label><input id="pwCurrent" type="password" autocomplete="current-password" /></div>
+              <div><label>Nytt lösenord</label><input id="pwNew" type="password" autocomplete="new-password" /></div>
+              <div><label>Bekräfta nytt lösenord</label><input id="pwConfirm" type="password" autocomplete="new-password" /></div>
+            </div>
+            <p><button type="button" id="btnChangePassword">Byt lösenord</button></p>
+            <p class="ok" id="pwOk" hidden></p>
+            <p class="err" id="pwErr" hidden></p>
+            <h3>Alla administratörer</h3>
+            <div id="usersList"></div>
+            <h3>Ny admin</h3>
+            <div class="row">
+              <div><label>Förnamn</label><input id="uFirst" /></div>
+              <div><label>Efternamn</label><input id="uLast" /></div>
+              <div><label>E-post</label><input id="uEmail" type="email" /></div>
+              <div><label>Lösenord</label><input id="uPass" type="password" /></div>
+            </div>
+            <p><button type="button" id="btnCreateUser">Skapa</button></p>
+            <p class="err" id="userErr" hidden></p>
+          </div>
+        </details>
       </div>
       </div>
     </div>

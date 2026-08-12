@@ -457,6 +457,38 @@
       timelineBookings.filter(function (x) { return x.id === id; })[0];
   }
 
+  /** Booking workflow: only the current step is open; the rest stay collapsed. */
+  function processStep(opts) {
+    var state = opts.state || 'todo';
+    var open = !!opts.open;
+    var cls = 'process-step is-' + state + (open ? ' is-open' : '');
+    var html = '<details class="' + cls + '"' + (open ? ' open' : '') + ' data-step="' + escapeHtml(opts.id) + '">';
+    html += '<summary class="process-step-head">';
+    html += '<span class="process-step-num" aria-hidden="true">' + escapeHtml(opts.num) + '</span>';
+    html += '<span class="process-step-title">' + escapeHtml(opts.title) + '</span>';
+    if (opts.badge) html += '<span class="process-step-badge">' + escapeHtml(opts.badge) + '</span>';
+    html += '</summary>';
+    html += '<div class="process-step-body">';
+    if (opts.lead) html += '<p class="detail-section-lead">' + opts.lead + '</p>';
+    html += opts.body || '';
+    html += '</div></details>';
+    return html;
+  }
+
+  function accordion(opts) {
+    var open = !!opts.open;
+    var cls = 'detail-accordion' + (opts.danger ? ' is-danger' : '') + (open ? ' is-open' : '');
+    var html = '<details class="' + cls + '"' + (open ? ' open' : '') + '>';
+    html += '<summary>' + escapeHtml(opts.title);
+    if (opts.badge) html += ' <span class="process-step-badge">' + escapeHtml(opts.badge) + '</span>';
+    html += '</summary>';
+    html += '<div class="detail-accordion-body">';
+    if (opts.lead) html += '<p class="detail-section-lead muted">' + opts.lead + '</p>';
+    html += opts.body || '';
+    html += '</div></details>';
+    return html;
+  }
+
   function openDetail(id) {
     selectedId = id;
     var b = findBooking(id);
@@ -464,17 +496,22 @@
     showModal('detailModal');
     $('detailTitle').textContent = b.bookingNumber;
     var html = '';
+    var needsApproval = b.status === 'Requested' || b.status === 'ChangePending';
+    var canHandover = ['Approved', 'HandedOut', 'Returned'].indexOf(b.status) >= 0;
+    var canEditPads = ['Returned', 'Cancelled', 'Rejected'].indexOf(b.status) < 0;
+    var closed = ['Returned', 'Cancelled', 'Rejected'].indexOf(b.status) >= 0;
 
     if (b.doubleBooked) {
+      html += '<div class="conflict-box">';
       html += '<p><span class="badge badge-double">Dubbelbokat</span> ' +
         '<span class="muted">underliggande status: ' + escapeHtml(statusLabel(b.status)) + '</span></p>';
-      html += '<div class="conflict-box"><p><strong>Krockar med</strong></p><ul class="conflict-list">';
+      html += '<p><strong>Krockar med</strong></p><ul class="conflict-list">';
       (b.conflicts || []).forEach(function (c) {
         html += '<li><strong>' + escapeHtml(c.padName) + '</strong> — samma period som ' +
           escapeHtml(c.otherNumber) + ' (' + escapeHtml(c.otherGuest) + ', ' +
           c.otherStart + ' – ' + c.otherEnd + ', ' + escapeHtml(statusLabel(c.otherStatus)) + ')</li>';
       });
-      html += '</ul><p class="muted">Byt till ledig utrustning nedan för att lösa krocken.</p></div>';
+      html += '</ul><p class="muted">Byt utrustning under Mer → Utrustning.</p></div>';
     }
 
     html += '<div class="detail-summary">';
@@ -497,72 +534,136 @@
     html += '<div><dt>Summa</dt><dd><strong>' + b.priceTotal + ' SEK</strong></dd></div>';
     html += '</dl></div>';
 
-    if (b.status === 'Requested' || b.status === 'ChangePending') {
-      html += '<section class="detail-section">';
-      html += '<h3>Förfrågan</h3>';
-      html += '<p class="detail-section-lead">Godkänn eller avslå innan betalning och utlämning.</p>';
-      html += '<div class="actions">';
-      html += '<button type="button" id="actApprove">Godkänn</button>';
-      html += '<button type="button" class="ghost" id="actReject">Avslå</button>';
-      html += '</div></section>';
-    }
+    html += '<div class="process-flow">';
+    html += '<p class="process-flow-label">Process</p>';
 
-    html += '<section class="detail-section">';
-    html += '<h3>Betalning</h3>';
-    html += '<p class="detail-section-lead">' + (b.paid
-      ? 'Bokningen är markerad som betald.'
-      : 'Ingen betalning registrerad ännu.') + '</p>';
-    html += '<div class="actions">';
-    html += '<button type="button" id="actPaid"' + (b.paid ? ' class="ghost"' : '') + '>' +
-      (b.paid ? 'Markera som obetald' : 'Markera som betald') + '</button>';
-    html += '</div></section>';
-
-    html += '<section class="detail-section">';
-    html += '<h3>Utlämning &amp; återlämning</h3>';
-    if (['Approved', 'HandedOut', 'Returned'].indexOf(b.status) >= 0) {
-      var handoverLabel = b.status === 'HandedOut' ? 'Återlämna' : 'Lämna ut';
-      var handoverClass = b.status === 'Approved' ? 'warn' : (b.status === 'Returned' ? 'ghost' : '');
-      html += '<p class="detail-section-lead">Hantera hela beställningen med en knapp.</p>';
-      html += '<div class="actions"><button type="button" class="' + handoverClass + '" id="actHandover">' +
-        handoverLabel + '</button></div>';
+    var approveState = 'todo';
+    var approveBadge = 'Väntar';
+    if (needsApproval) {
+      approveState = 'current';
+      approveBadge = 'Nu';
+    } else if (['Rejected', 'Cancelled'].indexOf(b.status) >= 0) {
+      approveState = 'done';
+      approveBadge = statusLabel(b.status);
     } else {
-      html += '<p class="detail-section-lead muted">Ingen utlämningsåtgärd för denna status.</p>';
+      approveState = 'done';
+      approveBadge = 'Klar';
     }
-    html += '</section>';
+    var approveBody = needsApproval
+      ? '<div class="actions">' +
+        '<button type="button" id="actApprove">Godkänn</button>' +
+        '<button type="button" class="ghost" id="actReject">Avslå</button></div>'
+      : '<p class="muted">Steget är klart.</p>';
+    html += processStep({
+      id: 'approve',
+      num: '1',
+      title: 'Godkänn',
+      badge: approveBadge,
+      state: approveState,
+      open: needsApproval,
+      lead: needsApproval
+        ? 'Godkänn eller avslå förfrågan innan betalning och utlämning.'
+        : '',
+      body: approveBody
+    });
 
-    html += '<section class="detail-section">';
-    html += '<h3>Självbetjäning</h3>';
-    html += '<p class="detail-section-lead muted">Gästen öppnar dörren och måste därefter bekräfta utlämning respektive återlämning.</p>';
-    html += '<div class="check-row">';
-    html += flagCheckbox('flagPickup', 'Tillåt egen hämtning (Open door → bekräfta utlämning)', b.allowSelfPickup);
-    html += flagCheckbox('flagReturn', 'Tillåt egen återlämning (Open door → bekräfta återlämning)', b.allowSelfReturn);
-    html += '</div></section>';
+    var payState = b.paid ? 'done' : (needsApproval ? 'todo' : 'current');
+    var payBadge = b.paid ? 'Betald' : (needsApproval ? 'Senare' : 'Nu');
+    html += processStep({
+      id: 'pay',
+      num: '2',
+      title: 'Betalning',
+      badge: payBadge,
+      state: payState,
+      open: !needsApproval && !b.paid && !closed,
+      lead: b.paid ? 'Bokningen är markerad som betald.' : 'Ingen betalning registrerad ännu.',
+      body: '<div class="actions"><button type="button" id="actPaid"' + (b.paid ? ' class="ghost"' : '') + '>' +
+        (b.paid ? 'Markera som obetald' : 'Markera som betald') + '</button></div>'
+    });
 
-    if (['Returned', 'Cancelled', 'Rejected'].indexOf(b.status) < 0) {
-      html += '<section class="detail-section">';
-      html += '<h3>Utrustning</h3>';
-      html += '<div class="actions"><button type="button" class="ghost" id="actEditPads">Ändra utrustning</button></div>';
-      html += '<div id="editPadsBox" class="detail-panel" hidden></div>';
-      html += '</section>';
+    var handState = 'todo';
+    var handBadge = 'Senare';
+    var handLead = 'Godkänn bokningen först.';
+    var handBody = '<p class="muted">Ingen utlämningsåtgärd ännu.</p>';
+    if (b.status === 'Approved') {
+      handState = 'current';
+      handBadge = 'Nu';
+      handLead = 'Lämna ut hela beställningen när gästen får utrustningen.';
+      handBody = '<div class="actions"><button type="button" class="warn" id="actHandover">Lämna ut</button></div>';
+    } else if (b.status === 'HandedOut') {
+      handState = 'current';
+      handBadge = 'Utlämnad';
+      handLead = 'Utrustningen är utlämnad. Markera när den återlämnas.';
+      handBody = '<div class="actions"><button type="button" id="actHandover">Återlämna</button></div>';
+    } else if (b.status === 'Returned') {
+      handState = 'done';
+      handBadge = 'Klar';
+      handLead = 'Återlämning är registrerad.';
+      handBody = '<div class="actions"><button type="button" class="ghost" id="actHandover">Lämna ut</button></div>' +
+        '<p class="muted">Knappen ångrar återlämning.</p>';
+    } else if (closed) {
+      handState = 'done';
+      handBadge = statusLabel(b.status);
+      handLead = '';
+      handBody = '<p class="muted">Ingen utlämningsåtgärd för denna status.</p>';
+    }
+    html += processStep({
+      id: 'handover',
+      num: '3',
+      title: 'Utlämning',
+      badge: handBadge,
+      state: handState,
+      open: canHandover && (b.status === 'Approved' || b.status === 'HandedOut'),
+      lead: handLead,
+      body: handBody
+    });
+
+    html += '</div>';
+
+    html += '<div class="detail-more">';
+    html += '<p class="process-flow-label">Mer</p>';
+
+    html += accordion({
+      title: 'Självbetjäning',
+      badge: (b.allowSelfPickup || b.allowSelfReturn) ? 'På' : '',
+      open: false,
+      lead: 'Gästen öppnar dörren och bekräftar sedan utlämning respektive återlämning.',
+      body: '<div class="check-row">' +
+        flagCheckbox('flagPickup', 'Tillåt egen hämtning', b.allowSelfPickup) +
+        flagCheckbox('flagReturn', 'Tillåt egen återlämning', b.allowSelfReturn) +
+        '</div>'
+    });
+
+    if (canEditPads) {
+      html += accordion({
+        title: 'Ändra utrustning',
+        badge: b.doubleBooked ? 'Dubbel' : '',
+        open: !!b.doubleBooked,
+        lead: 'Byt vilka pads bokningen gäller.',
+        body: '<div class="actions"><button type="button" class="ghost" id="actEditPads">Välj utrustning</button></div>' +
+          '<div id="editPadsBox" class="detail-panel" hidden></div>'
+      });
     } else {
       html += '<div id="editPadsBox" hidden></div>';
     }
 
-    html += '<section class="detail-section detail-section-foot">';
-    html += '<h3>Mejl till gäst</h3>';
-    html += '<p class="detail-section-lead muted">Skicka en ny magisk länk om gästen inte hittat sitt mejl.</p>';
-    html += '<div class="actions">';
-    html += '<button type="button" class="ghost" id="actResendMail">Skicka magisk länk igen</button>';
-    html += '</div>';
-    html += '<p class="ok" id="mailOk" hidden></p>';
-    html += '</section>';
+    html += accordion({
+      title: 'Mejl till gäst',
+      open: false,
+      lead: 'Skicka en ny magisk länk om gästen inte hittat sitt mejl.',
+      body: '<div class="actions"><button type="button" class="ghost" id="actResendMail">Skicka magisk länk igen</button></div>' +
+        '<p class="ok" id="mailOk" hidden></p>'
+    });
 
-    html += '<section class="detail-section detail-section-danger">';
-    html += '<h3>Radera bokning</h3>';
-    html += '<p class="detail-section-lead muted">Tar bort bokningen permanent. Kan inte ångras.</p>';
-    html += '<div class="actions">';
-    html += '<button type="button" class="warn" id="actDelete">Radera bokning</button>';
-    html += '</div></section>';
+    html += accordion({
+      title: 'Radera bokning',
+      danger: true,
+      open: false,
+      lead: 'Tar bort bokningen permanent. Kan inte ångras.',
+      body: '<div class="actions"><button type="button" class="warn" id="actDelete">Radera bokning</button></div>'
+    });
+
+    html += '</div>';
 
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
