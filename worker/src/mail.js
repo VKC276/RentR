@@ -215,33 +215,30 @@ function bookingRows(locale, v, { withStatus = false, withTotal = true } = {}) {
 }
 
 /**
- * Apps Script web apps 302 to googleusercontent and drop the POST body if the
- * client follows redirects as GET. Re-POST manually, with Content-Length —
- * the echo host returns 411 without it.
+ * Apps Script web apps run doPost on the first /exec hit, then 302 to
+ * script.googleusercontent.com which only serves the result via GET.
+ * Following that hop with POST yields 405/411.
  */
 async function postMailWebhook(url, payload) {
   const body = JSON.stringify(payload);
-  const headers = {
+  const postHeaders = {
     'Content-Type': 'text/plain;charset=utf-8',
     'Content-Length': String(new TextEncoder().encode(body).byteLength),
   };
 
-  async function post(target) {
-    return fetch(target, { method: 'POST', headers, body, redirect: 'manual' });
-  }
+  let res = await fetch(url, {
+    method: 'POST',
+    headers: postHeaders,
+    body,
+    redirect: 'manual',
+  });
 
-  let res = await post(url);
-  // Follow a short chain of redirects with the same POST body.
-  for (let i = 0; i < 3 && res.status >= 300 && res.status < 400; i++) {
+  if (res.status >= 300 && res.status < 400) {
     const loc = res.headers.get('Location');
     if (!loc) {
       throw new Error('Mail-webhook redirect utan Location (' + res.status + ')');
     }
-    res = await post(loc);
-  }
-
-  if (res.status >= 300 && res.status < 400) {
-    throw new Error('Mail-webhook för många redirects');
+    res = await fetch(loc, { method: 'GET', redirect: 'follow' });
   }
 
   const text = await res.text();
