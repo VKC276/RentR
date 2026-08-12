@@ -55,7 +55,6 @@ function confirmReturn_(token) {
   });
   logEvent_(b.id, 'confirm_return', b.email, {});
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, b.id));
-  try { mailGuestStatus_(booking); } catch (e) {}
   return { booking: booking };
 }
 

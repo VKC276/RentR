@@ -69,7 +69,6 @@ function createAndSendDoorPass_(payload, actor) {
   appendObject_(SHEET_NAMES.DoorPasses, row);
 
   var url = doorPassUrl_(token);
-  mailDoorPass_(row, url);
 
   return {
     pass: enrichDoorPass_(row),

@@ -3,6 +3,7 @@ js/config.local.js
 .env.local
 .dev.vars
 script-properties.local.txt
+.mail-webhook-secret.tmp
 .venv/
 __pycache__/
 .DS_Store

@@ -223,12 +223,6 @@ function submitBooking_(payload) {
   // before them: a client that already timed out and re-sent gets it now
   // instead of after the mail server.
   publishIdempotentResult_(payload.requestId, out);
-  try {
-    mailBookingCreated_(booking, magic);
-    mailAdminNewRequest_(booking);
-  } catch (e) {
-    // mail failure should not roll back booking
-  }
   return out;
 }
 
@@ -299,7 +293,6 @@ function guestRequestChange_(token, payload) {
 
   logEvent_(b.id, 'change_requested', b.email, detail);
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, b.id));
-  try { mailAdminChange_(booking); } catch (e) {}
   return { booking: booking };
 }
 
@@ -330,12 +323,6 @@ function guestCancelBooking_(token) {
   updateObjectById_(SHEET_NAMES.Bookings, b.id, { status: 'Cancelled', updatedAt: nowIso_() });
   logEvent_(b.id, 'cancelled', b.email, { by: 'guest' });
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, b.id));
-  try {
-    mailGuestCancelled_(booking);
-    mailAdminCancelled_(booking);
-  } catch (e) {
-    // a mail failure must not undo the cancellation
-  }
   return { booking: booking };
 }
 
@@ -503,11 +490,6 @@ function adminUpdateBooking_(bookingId, payload, actor) {
   updateObjectById_(SHEET_NAMES.Bookings, bookingId, patch);
   logEvent_(bookingId, action, actor.email, payload);
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, bookingId));
-  try {
-    if (action === 'approve' || action === 'reject' || action === 'handOut' || action === 'return') {
-      mailGuestStatus_(booking);
-    }
-  } catch (e) {}
   return { booking: booking };
 }
 
