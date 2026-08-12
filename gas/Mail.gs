@@ -145,3 +145,56 @@ function mailDoorPass_(pass, url) {
     tMail_(locale, 'doorPassBody', vars)
   );
 }
+
+/**
+ * Cloudflare Worker mail webhook. Body: { action, secret, messages:[{to,subject,body,html?}] }
+ * Secret must match Script Property MAIL_WEBHOOK_SECRET (same as Worker MAIL_WEBHOOK_SECRET).
+ */
+function handleMailRelay_(body) {
+  body = body || {};
+  if (body.action === 'ping' || !body.action) {
+    return jsonResponse_({ ok: true, service: 'rentr-mail' });
+  }
+  if (body.action !== 'relayMail') {
+    return jsonResponse_({ error: 'Endast relayMail stöds', status: 400 }, 400);
+  }
+
+  var expected = PropertiesService.getScriptProperties().getProperty('MAIL_WEBHOOK_SECRET') || '';
+  if (!expected || body.secret !== expected) {
+    return jsonResponse_({ error: 'Unauthorized', status: 401 }, 401);
+  }
+
+  var messages = body.messages || [];
+  if (!Array.isArray(messages) || !messages.length) {
+    return jsonResponse_({ error: 'Inga meddelanden', status: 400 }, 400);
+  }
+
+  var sent = 0;
+  var errors = [];
+  messages.forEach(function (m) {
+    try {
+      var to = String(m.to || '').trim();
+      var subject = String(m.subject || '');
+      var text = String(m.body || '');
+      var html = m.html ? String(m.html) : '';
+      if (!to || !subject) return;
+      if (html) {
+        GmailApp.sendEmail(to, subject, text, { htmlBody: html, name: 'RentR' });
+      } else {
+        GmailApp.sendEmail(to, subject, text, { name: 'RentR' });
+      }
+      sent++;
+    } catch (err) {
+      errors.push(String(err && err.message ? err.message : err));
+    }
+  });
+
+  return jsonResponse_({ ok: true, sent: sent, errors: errors });
+}
+
+/** Run once in the editor after setting the same secret as the Worker. */
+function setMailWebhookSecret() {
+  var secret = 'REPLACE_WITH_A_LONG_RANDOM_STRING';
+  PropertiesService.getScriptProperties().setProperty('MAIL_WEBHOOK_SECRET', secret);
+  Logger.log('MAIL_WEBHOOK_SECRET sparad.');
+}

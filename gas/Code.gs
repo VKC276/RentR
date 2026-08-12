@@ -45,6 +45,19 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  // Cloudflare Worker posts relayMail here. Handle it before the Sheets API
+  // so a missing spreadsheet cannot block outbound mail.
+  try {
+    var peek = {};
+    if (e && e.postData && e.postData.contents) {
+      try { peek = JSON.parse(e.postData.contents); } catch (err) { peek = {}; }
+    }
+    if (peek.action === 'relayMail' || peek.action === 'ping') {
+      return handleMailRelay_(peek);
+    }
+  } catch (err) {
+    return jsonResponse_({ error: String(err && err.message ? err.message : err), status: 500 }, 500);
+  }
   return handleApi_(e);
 }
 
