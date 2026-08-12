@@ -5,6 +5,8 @@
  * Script property MAIL_WEBHOOK_SECRET must match Worker MAIL_WEBHOOK_SECRET.
  */
 
+var MAIL_FROM_NAME = 'Västerviks klätterklubb';
+
 function mailJson_(obj, status) {
   var out = obj || {};
   if (status && !out.status) out.status = status;
@@ -65,15 +67,17 @@ function handleMailRelay_(body) {
 
 function sendRelayMessage_(to, subject, text, html) {
   if (!text) text = subject;
+  var opts = { name: MAIL_FROM_NAME };
   try {
     if (html) {
-      GmailApp.sendEmail(to, subject, text, { htmlBody: html });
+      opts.htmlBody = html;
+      GmailApp.sendEmail(to, subject, text, opts);
     } else {
-      GmailApp.sendEmail(to, subject, text);
+      GmailApp.sendEmail(to, subject, text, opts);
     }
   } catch (err) {
     if (html) {
-      GmailApp.sendEmail(to, subject, text);
+      GmailApp.sendEmail(to, subject, text, { name: MAIL_FROM_NAME });
       return;
     }
     throw err;
