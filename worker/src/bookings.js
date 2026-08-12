@@ -593,6 +593,8 @@ export async function listBookingsAdmin(db, query) {
   const number = query && query.bookingNumber ? String(query.bookingNumber).trim().toLowerCase() : '';
   const status = query && query.status ? String(query.status) : '';
   const doubleOnly = status === 'DoubleBooked';
+  const closedOnly = status === 'Closed';
+  const CLOSED_STATUSES = ['Returned', 'Cancelled', 'Rejected'];
 
   const index = await bookingIndex(db);
   const conflicts = computeConflicts(rows, index);
@@ -601,8 +603,11 @@ export async function listBookingsAdmin(db, query) {
   if (number) {
     filtered = filtered.filter((b) => String(b.bookingNumber).toLowerCase().includes(number));
   }
-  if (status && !doubleOnly) {
+  if (status && !doubleOnly && !closedOnly) {
     filtered = filtered.filter((b) => b.status === status);
+  }
+  if (closedOnly) {
+    filtered = filtered.filter((b) => CLOSED_STATUSES.includes(b.status));
   }
   filtered.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 

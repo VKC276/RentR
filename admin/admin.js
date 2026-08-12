@@ -31,15 +31,16 @@
     Returned: 'Återlämnad',
     Cancelled: 'Avbokad',
     Rejected: 'Avslagen',
-    DoubleBooked: 'Dubbelbokat'
+    DoubleBooked: 'Dubbelbokat',
+    Closed: 'Avslutade'
   };
 
   function statusLabel(status) {
     return STATUS_LABELS[status] || status;
   }
 
-  /** DoubleBooked is computed, not stored — the filter sends that key to the API. */
-  var FILTER_STATUSES = ['DoubleBooked', 'Requested', 'Approved', 'ChangePending', 'HandedOut', 'Returned', 'Cancelled', 'Rejected'];
+  /** Closed is a filter key, not a stored status. */
+  var FILTER_STATUSES = ['Requested', 'Approved', 'HandedOut', 'Closed'];
 
   function displayStatus(b) {
     return b.doubleBooked ? 'DoubleBooked' : b.status;
@@ -469,13 +470,9 @@
     if (guestNotes) {
       html += '<div class="detail-guest-message">';
       html += '<p class="detail-guest-message-label">Meddelande från gäst</p>';
-      html += '<p class="guest-notes">' + escapeHtml(guestNotes) + '</p>';
+      html += '<blockquote class="guest-notes">' + escapeHtml(guestNotes) + '</blockquote>';
       html += '</div>';
     }
-    html += '<div class="actions" style="margin-top:0.75rem;">';
-    html += '<button type="button" id="actResendMail">Skicka magisk länk igen</button>';
-    html += '</div>';
-    html += '<p class="ok" id="mailOk" hidden></p>';
     html += '<dl class="detail-facts">';
     html += '<div><dt>Utrustning</dt><dd>' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ') || '—') + '</dd></div>';
     html += '<div><dt>Period</dt><dd>' + b.startDate + ' – ' + b.endDate + ' <span class="muted">(' + b.days + ' dygn)</span></dd></div>';
@@ -531,6 +528,15 @@
     } else {
       html += '<div id="editPadsBox" hidden></div>';
     }
+
+    html += '<section class="detail-section detail-section-foot">';
+    html += '<h3>Mejl till gäst</h3>';
+    html += '<p class="detail-section-lead muted">Skicka en ny magisk länk om gästen inte hittat sitt mejl.</p>';
+    html += '<div class="actions">';
+    html += '<button type="button" class="ghost" id="actResendMail">Skicka magisk länk igen</button>';
+    html += '</div>';
+    html += '<p class="ok" id="mailOk" hidden></p>';
+    html += '</section>';
 
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
