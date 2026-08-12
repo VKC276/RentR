@@ -8,6 +8,7 @@
   function applyI18n() {
     I18n.renderLangSwitcher($('lang'));
     $('brand').textContent = I18n.t('appName');
+    document.title = I18n.t('appName') + ' — ' + I18n.t('manage');
     $('loading').textContent = I18n.t('loading');
     if (booking) render();
   }

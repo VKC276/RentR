@@ -1,4 +1,4 @@
-# Deploy RentR Worker (wrangler.jsonc lives in repo root).
+# Deploy VKK Rental Worker (wrangler.jsonc lives in repo root).
 $nodeDir = 'C:\Program Files\nodejs'
 if (Test-Path $nodeDir) {
   $env:Path = "$nodeDir;$env:Path"

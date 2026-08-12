@@ -48,6 +48,7 @@
   function applyI18n() {
     I18n.renderLangSwitcher($('lang'));
     $('brand').textContent = I18n.t('appName');
+    document.title = I18n.t('appName') + ' — ' + I18n.t('book');
     $('navFind').textContent = I18n.t('find');
     $('titleBook').textContent = I18n.t('book');
     $('legFree').textContent = I18n.t('legendFree');
