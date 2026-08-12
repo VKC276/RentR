@@ -593,19 +593,42 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .list-row:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(26, 43, 51, 0.09); }
 .list-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .list-row.booking {
-  grid-template-columns: 7rem minmax(0, 1fr) 11.5rem 8rem 8rem;
-  grid-template-areas: "no guest period status price";
+  grid-template-columns: minmax(12rem, 1.2fr) minmax(0, 1fr) 11.5rem 6.5rem;
+  grid-template-areas: "no guest period price";
 }
 .list-row.pass {
   grid-template-columns: minmax(0, 1fr) 11.5rem 9rem;
   grid-template-areas: "who period status";
 }
-.list-row .r-no { grid-area: no; font-weight: 700; font-variant-numeric: tabular-nums; }
+.list-row .r-no {
+  grid-area: no;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.list-row .r-no-id { flex: 0 0 auto; }
+.list-row .r-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
 .list-row .r-guest { grid-area: guest; min-width: 0; }
 .list-row .r-who { grid-area: who; min-width: 0; font-weight: 600; }
 .list-row .r-period { grid-area: period; white-space: nowrap; }
 .list-row .r-status { grid-area: status; }
-.list-row .r-price { grid-area: price; text-align: right; }
+.list-row .r-price {
+  grid-area: price;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  align-self: center;
+}
 .list-row .sub {
   display: block;
   font-size: 0.8rem;
@@ -619,8 +642,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   .list-row.booking {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "no status"
-      "guest price"
+      "no price"
+      "guest guest"
       "period period";
   }
   .list-row.pass {
@@ -750,7 +773,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   margin: 0;
   padding: 0.9rem 1rem 1.05rem;
   border: 0;
-  border-left: 3px solid var(--accent);
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.55;

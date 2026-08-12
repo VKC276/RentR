@@ -14,6 +14,9 @@ const MAIL_I18N = {
     createdIntro: 'Din förfrågan är mottagen och väntar på godkännande.',
     statusSubject: 'Bokning {{bookingNumber}}: {{status}}',
     statusIntro: 'Status för din bokning har uppdaterats.',
+    rejectedIntro: 'Din förfrågan har avslagits.',
+    changeRejectedIntro: 'Din ändringsförfrågan har avslagits. Bokningen fortsätter enligt tidigare uppgifter.',
+    labelReason: 'Orsak',
     cancelledSubject: 'Bokning {{bookingNumber}} är avbokad',
     cancelledIntro: 'Din bokning är avbokad och datumen är åter lediga. Inget mer behövs från dig.',
     adminNewSubject: 'Ny förfrågan {{bookingNumber}}',
@@ -44,6 +47,9 @@ const MAIL_I18N = {
     createdIntro: 'Your request was received and is waiting for approval.',
     statusSubject: 'Booking {{bookingNumber}}: {{status}}',
     statusIntro: 'The status of your booking has been updated.',
+    rejectedIntro: 'Your request has been declined.',
+    changeRejectedIntro: 'Your change request has been declined. The booking continues as before.',
+    labelReason: 'Reason',
     cancelledSubject: 'Booking {{bookingNumber}} is cancelled',
     cancelledIntro: 'Your booking is cancelled and the dates are free again. Nothing further is needed from you.',
     adminNewSubject: 'New request {{bookingNumber}}',
@@ -73,6 +79,9 @@ const MAIL_I18N = {
     createdIntro: 'Ihre Anfrage wurde erhalten und wartet auf Freigabe.',
     statusSubject: 'Buchung {{bookingNumber}}: {{status}}',
     statusIntro: 'Der Status Ihrer Buchung wurde aktualisiert.',
+    rejectedIntro: 'Ihre Anfrage wurde abgelehnt.',
+    changeRejectedIntro: 'Ihre Änderungsanfrage wurde abgelehnt. Die Buchung bleibt unverändert.',
+    labelReason: 'Grund',
     cancelledSubject: 'Buchung {{bookingNumber}} ist storniert',
     cancelledIntro: 'Ihre Buchung ist storniert und die Daten sind wieder frei. Es ist nichts weiter zu tun.',
     adminNewSubject: 'Neue Anfrage {{bookingNumber}}',
@@ -344,16 +353,27 @@ export async function mailBookingCreated(env, booking, magicToken) {
   await sendMessages(env, messages);
 }
 
-export async function mailGuestStatus(env, booking, magicToken) {
+export async function mailGuestStatus(env, booking, magicToken, opts) {
   const cfg = await getConfigMap(env.DB);
   const locale = booking.locale || 'sv';
   const v = bookingVars(booking, magicToken, cfg);
+  const reason = String((opts && opts.reason) || booking.rejectReason || '').trim();
+  let intro = t(locale, 'statusIntro', v);
+  if (booking.status === 'Rejected') {
+    intro = t(locale, 'rejectedIntro', v);
+  } else if (reason && booking.status === 'Approved') {
+    intro = t(locale, 'changeRejectedIntro', v);
+  }
+  const rows = bookingRows(locale, v, { withStatus: true });
+  if (reason) {
+    rows.push({ label: t(locale, 'labelReason'), value: reason });
+  }
   const msg = compose(locale, {
     subject: t(locale, 'statusSubject', v),
     bookingNumber: v.bookingNumber,
-    intro: t(locale, 'statusIntro', v),
+    intro,
     vars: v,
-    rows: bookingRows(locale, v, { withStatus: true }),
+    rows,
     ctaLabel: t(locale, 'labelManage'),
     ctaUrl: v.url,
   });

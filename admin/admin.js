@@ -391,15 +391,18 @@
       var shown = displayStatus(b);
       var badgeClass = b.doubleBooked ? ' badge-double' : '';
       return '<button type="button" class="list-row booking' + (b.doubleBooked ? ' is-double' : '') + '" data-id="' + b.id + '">' +
-        '<span class="r-no">' + escapeHtml(b.bookingNumber) + '</span>' +
+        '<span class="r-no">' +
+          '<span class="r-no-id">' + escapeHtml(b.bookingNumber) + '</span>' +
+          '<span class="r-tags">' +
+            '<span class="badge' + badgeClass + '">' + escapeHtml(statusLabel(shown)) + '</span>' +
+            '<span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' + (b.paid ? 'Betald' : 'Obetald') + '</span>' +
+          '</span>' +
+        '</span>' +
         '<span class="r-guest">' + escapeHtml(b.firstName + ' ' + b.lastName) +
           '<span class="sub">' + escapeHtml(b.email) + '</span></span>' +
         '<span class="r-period">' + b.startDate + ' – ' + b.endDate +
           '<span class="sub">' + b.days + ' dygn</span></span>' +
-        '<span class="r-status"><span class="badge' + badgeClass + '">' + escapeHtml(statusLabel(shown)) + '</span></span>' +
-        '<span class="r-price">' + b.priceTotal + ' SEK' +
-          '<span class="sub"><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' +
-          (b.paid ? 'Betald' : 'Obetald') + '</span></span></span>' +
+        '<span class="r-price">' + b.priceTotal + ' SEK</span>' +
         '</button>';
     }).join('');
     $('bookingsEmpty').hidden = bookings.length > 0;
@@ -526,7 +529,7 @@
     var guestNotes = String(b.notes || '').trim();
     if (guestNotes) {
       html += '<div class="detail-guest-message">';
-      html += '<p class="detail-guest-message-label">Meddelande från gäst</p>';
+      html += '<p class="detail-guest-message-label">Meddelande från kund</p>';
       html += '<blockquote class="guest-notes">' + escapeHtml(guestNotes) + '</blockquote>';
       html += '</div>';
     }
@@ -540,27 +543,31 @@
     html += '<p class="process-flow-label">Process</p>';
 
     var approveState = 'todo';
-    var approveBadge = 'Väntar';
     if (needsApproval) {
       approveState = 'current';
-      approveBadge = 'Nu';
     } else if (['Rejected', 'Cancelled'].indexOf(b.status) >= 0) {
       approveState = 'done';
-      approveBadge = statusLabel(b.status);
     } else {
       approveState = 'done';
-      approveBadge = 'Klar';
     }
     var approveBody = needsApproval
       ? '<div class="actions">' +
         '<button type="button" id="actApprove">Godkänn</button>' +
-        '<button type="button" class="ghost" id="actReject">Avslå</button></div>'
-      : '<p class="muted">Steget är klart.</p>';
+        '<button type="button" class="ghost" id="actReject">Avslå</button></div>' +
+        '<div id="rejectBox" class="detail-panel" hidden>' +
+        '<label for="rejectReason">Orsak till avslag</label>' +
+        '<textarea id="rejectReason" rows="3" maxlength="500" placeholder="Kort meddelande till kunden…"></textarea>' +
+        '<div class="actions">' +
+        '<button type="button" class="warn" id="actRejectConfirm">Bekräfta avslag</button>' +
+        '<button type="button" class="ghost" id="actRejectCancel">Avbryt</button>' +
+        '</div></div>'
+      : (String(b.rejectReason || '').trim()
+        ? '<p class="muted">Orsak: ' + escapeHtml(String(b.rejectReason).trim()) + '</p>'
+        : '<p class="muted">Steget är klart.</p>');
     html += processStep({
       id: 'approve',
       num: '1',
       title: 'Godkänn',
-      badge: approveBadge,
       state: approveState,
       open: needsApproval,
       lead: needsApproval
@@ -570,12 +577,10 @@
     });
 
     var payState = b.paid ? 'done' : (needsApproval ? 'todo' : 'current');
-    var payBadge = b.paid ? 'Betald' : (needsApproval ? 'Senare' : 'Nu');
     html += processStep({
       id: 'pay',
       num: '2',
       title: 'Betalning',
-      badge: payBadge,
       state: payState,
       open: !needsApproval && !b.paid && !closed,
       lead: b.paid ? 'Bokningen är markerad som betald.' : 'Ingen betalning registrerad ännu.',
@@ -584,28 +589,23 @@
     });
 
     var handState = 'todo';
-    var handBadge = 'Senare';
     var handLead = 'Godkänn bokningen först.';
     var handBody = '<p class="muted">Ingen utlämningsåtgärd ännu.</p>';
     if (b.status === 'Approved') {
       handState = 'current';
-      handBadge = 'Nu';
-      handLead = 'Lämna ut hela beställningen när gästen får utrustningen.';
+      handLead = 'Lämna ut hela beställningen när kunden får utrustningen.';
       handBody = '<div class="actions"><button type="button" class="warn" id="actHandover">Lämna ut</button></div>';
     } else if (b.status === 'HandedOut') {
       handState = 'current';
-      handBadge = 'Utlämnad';
       handLead = 'Utrustningen är utlämnad. Markera när den återlämnas.';
       handBody = '<div class="actions"><button type="button" id="actHandover">Återlämna</button></div>';
     } else if (b.status === 'Returned') {
       handState = 'done';
-      handBadge = 'Klar';
       handLead = 'Återlämning är registrerad.';
       handBody = '<div class="actions"><button type="button" class="ghost" id="actHandover">Lämna ut</button></div>' +
         '<p class="muted">Knappen ångrar återlämning.</p>';
     } else if (closed) {
       handState = 'done';
-      handBadge = statusLabel(b.status);
       handLead = '';
       handBody = '<p class="muted">Ingen utlämningsåtgärd för denna status.</p>';
     }
@@ -613,7 +613,6 @@
       id: 'handover',
       num: '3',
       title: 'Utlämning',
-      badge: handBadge,
       state: handState,
       open: canHandover && (b.status === 'Approved' || b.status === 'HandedOut'),
       lead: handLead,
@@ -627,9 +626,8 @@
 
     html += accordion({
       title: 'Självbetjäning',
-      badge: (b.allowSelfPickup || b.allowSelfReturn) ? 'På' : '',
       open: false,
-      lead: 'Gästen öppnar dörren och bekräftar sedan utlämning respektive återlämning.',
+      lead: 'Kunden öppnar dörren och bekräftar sedan utlämning respektive återlämning.',
       body: '<div class="check-row">' +
         flagCheckbox('flagPickup', 'Tillåt egen hämtning', b.allowSelfPickup) +
         flagCheckbox('flagReturn', 'Tillåt egen återlämning', b.allowSelfReturn) +
@@ -639,7 +637,6 @@
     if (canEditPads) {
       html += accordion({
         title: 'Ändra utrustning',
-        badge: b.doubleBooked ? 'Dubbel' : '',
         open: !!b.doubleBooked,
         lead: 'Byt vilka pads bokningen gäller.',
         body: '<div class="actions"><button type="button" class="ghost" id="actEditPads">Välj utrustning</button></div>' +
@@ -650,9 +647,9 @@
     }
 
     html += accordion({
-      title: 'Mejl till gäst',
+      title: 'Mejl till kund',
       open: false,
-      lead: 'Skicka en ny magisk länk om gästen inte hittat sitt mejl.',
+      lead: 'Skicka en ny magisk länk om kunden inte hittat sitt mejl.',
       body: '<div class="actions"><button type="button" class="ghost" id="actResendMail">Skicka magisk länk igen</button></div>' +
         '<p class="ok" id="mailOk" hidden></p>'
     });
@@ -751,9 +748,35 @@
     }
 
     onAct('actApprove', 'approve');
-    onAct('actReject', 'reject');
     onAct('actPaid', 'setPaid', { paid: !b.paid });
     onAct('actResendMail', 'resendMail');
+    if ($('actReject')) {
+      $('actReject').onclick = function () {
+        var box = $('rejectBox');
+        if (!box) return;
+        box.hidden = false;
+        $('rejectReason').focus();
+      };
+    }
+    if ($('actRejectCancel')) {
+      $('actRejectCancel').onclick = function () {
+        var box = $('rejectBox');
+        if (box) box.hidden = true;
+        if ($('rejectReason')) $('rejectReason').value = '';
+        $('detailErr').hidden = true;
+      };
+    }
+    if ($('actRejectConfirm')) {
+      $('actRejectConfirm').onclick = function () {
+        var reason = ($('rejectReason') && $('rejectReason').value || '').trim();
+        if (reason.length < 3) {
+          $('detailErr').hidden = false;
+          $('detailErr').textContent = 'Skriv en kort orsak till avslaget (minst 3 tecken).';
+          return;
+        }
+        act('reject', { reason: reason }, $('actRejectConfirm'));
+      };
+    }
     if ($('actHandover')) {
       $('actHandover').onclick = function () {
         var op = 'handOut';

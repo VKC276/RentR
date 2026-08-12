@@ -33,6 +33,7 @@ const BOOKING_SELECT = `
          price_breakdown_json AS priceBreakdownJson,
          door_opened_for_return AS doorOpenedForReturn,
          door_opened_for_pickup AS doorOpenedForPickup, notes,
+         reject_reason AS rejectReason,
          created_at AS createdAt, updated_at AS updatedAt
   FROM bookings`;
 
@@ -331,6 +332,7 @@ function enrichFromRow(b, index) {
     doorOpenedForReturn: !!b.doorOpenedForReturn,
     doorOpenedForPickup: !!b.doorOpenedForPickup,
     notes: b.notes || '',
+    rejectReason: b.rejectReason || '',
     createdAt: b.createdAt,
     updatedAt: b.updatedAt,
     padIds,
@@ -687,16 +689,27 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       throw softError('Kan inte godkänna i status ' + b.status, 400);
     }
   } else if (action === 'reject') {
+    const reason = String(payload.reason || '').trim();
+    if (reason.length < 3) {
+      throw softError('Ange en kort orsak till avslaget (minst 3 tecken)', 400);
+    }
+    if (reason.length > 500) {
+      throw softError('Orsaken får vara högst 500 tecken', 400);
+    }
     if (b.status === 'Requested') {
       await db
-        .prepare(`UPDATE bookings SET status = 'Rejected', updated_at = ? WHERE id = ?`)
-        .bind(now, bookingId)
+        .prepare(
+          `UPDATE bookings SET status = 'Rejected', reject_reason = ?, updated_at = ? WHERE id = ?`
+        )
+        .bind(reason, now, bookingId)
         .run();
       releaseLocks = true;
     } else if (b.status === 'ChangePending') {
       await db
-        .prepare(`UPDATE bookings SET status = 'Approved', updated_at = ? WHERE id = ?`)
-        .bind(now, bookingId)
+        .prepare(
+          `UPDATE bookings SET status = 'Approved', reject_reason = ?, updated_at = ? WHERE id = ?`
+        )
+        .bind(reason, now, bookingId)
         .run();
     } else {
       throw softError('Kan inte avslå i status ' + b.status, 400);
@@ -859,7 +872,11 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
   const booking = await enrichBooking(db, bookingId);
   if (action === 'approve' || action === 'reject' || action === 'handOut' || action === 'return') {
     const magic = await createMagicToken(db, bookingId);
-    kick(ctx, mailGuestStatus(env, booking, magic));
+    const mailOpts =
+      action === 'reject'
+        ? { reason: String(payload.reason || '').trim() }
+        : undefined;
+    kick(ctx, mailGuestStatus(env, booking, magic, mailOpts));
   } else if (action === 'resendMail') {
     const magic = await createMagicToken(db, bookingId);
     // Await so admin sees success/failure instead of a silent background send.
