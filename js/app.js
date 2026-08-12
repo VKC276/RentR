@@ -4,8 +4,9 @@
     startDate: '',
     endDate: '',
     selected: [],
-    hold: null,
-    timerId: null,
+    // Pads the server refused on the last submit, kept so the message can be
+    // rebuilt when the guest switches language.
+    conflictPads: null,
     month: null,
     pads: [],
     // 'YYYY-MM-DD' -> { padIndex: true }, merged across every month loaded.
@@ -56,18 +57,25 @@
     $('legTaken').textContent = I18n.t('legendTaken');
     $('btnClearDates').textContent = I18n.t('clearDates');
     $('titlePads').textContent = I18n.t('available');
-    $('btnHold').textContent = I18n.t('continue');
+    $('btnContinue').textContent = I18n.t('continue');
+    $('titleForm').textContent = I18n.t('details');
     $('lblFirst').textContent = I18n.t('firstName');
     $('lblLast').textContent = I18n.t('lastName');
     $('lblEmail').textContent = I18n.t('email');
     $('lblPhone').textContent = I18n.t('phone');
     $('lblNotes').textContent = I18n.t('notes');
+    $('btnBackToPads').textContent = I18n.t('back');
     $('btnSubmit').textContent = I18n.t('submit');
-    $('holdLabel').textContent = I18n.t('holdLeft');
     $('payNote').textContent = I18n.t('payNote');
     $('thanksTitle').textContent = I18n.t('thanks');
     $('lblBookingNo').textContent = I18n.t('bookingNo');
+    renderConflict();
     renderCalendar();
+    // The pad cards carry translated text too, and they are built by hand
+    // rather than from a table of element ids.
+    if (!$('stepPads').hidden && state.startDate && state.endDate) {
+      renderPads(padsForRange(state.startDate, state.endDate), state.selected.slice());
+    }
     updateDateSummary();
     updatePriceBox();
   }
@@ -128,6 +136,17 @@
     el.textContent = msg;
   }
 
+  function scrollToEl(el) {
+    var top = el.getBoundingClientRect().top + window.pageYOffset - 20;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }
+
+  /** "A, B och C" — the last separator is a word, and words are translated. */
+  function joinNames(names) {
+    if (names.length < 2) return names.join('');
+    return names.slice(0, -1).join(', ') + ' ' + I18n.t('listAnd') + ' ' + names[names.length - 1];
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
@@ -140,7 +159,21 @@
     state.config = cfg;
   }
 
+  function padSignature(pads) {
+    return (pads || []).map(function (p) { return p.id; }).join(',');
+  }
+
   function absorbCalendar(cal) {
+    // blocked holds pad *indexes*, so everything already gathered points at the
+    // wrong pads as soon as admin adds or deactivates a resource. The first
+    // answer that shows a different set of pads throws the old picture away,
+    // stored months included.
+    if (state.pads.length && padSignature(cal.pads) !== padSignature(state.pads)) {
+      state.blocked = {};
+      state.loadedMonths = {};
+      state.fetchedMonths = {};
+      forgetStoredMonths();
+    }
     state.pads = cal.pads || [];
     (cal.days || []).forEach(function (d) {
       var set = {};
@@ -177,12 +210,15 @@
 
   /**
    * Paints from the last answer we saw so the month appears at once, and still
-   * refreshes behind it. The server revalidates everything at hold time, so a
-   * few stale seconds on screen cannot produce a bad booking.
+   * refreshes behind it. The server rechecks the selection when the request is
+   * submitted, so a stale screen can cost the guest a retry but never produce a
+   * double booking.
    */
   function primeFromStore(date) {
     var cal = readStoredMonth(monthKey(date));
-    if (!cal) return false;
+    // A stored month from before a resource changed would mix its pad indexes
+    // with the ones already on screen; leave it and wait for the server.
+    if (!cal || (state.pads.length && padSignature(cal.pads) !== padSignature(state.pads))) return false;
     absorbCalendar(cal);
     return true;
   }
@@ -293,6 +329,7 @@
   }
 
   function selectDate(date) {
+    hideConflict();
     if (!state.startDate || state.endDate || date < state.startDate) {
       state.startDate = date;
       state.endDate = '';
@@ -326,16 +363,26 @@
     });
   }
 
-  function renderPads(pads) {
+  /**
+   * keepIds re-selects what the guest had picked before, which is what makes a
+   * refused booking a small correction rather than a restart: only the pad that
+   * was lost is missing from the selection afterwards.
+   */
+  function renderPads(pads, keepIds) {
+    var keep = {};
+    (keepIds || []).forEach(function (id) { keep[id] = true; });
     var grid = $('padGrid');
     grid.innerHTML = '';
     state.selected = [];
-    $('btnHold').disabled = true;
     pads.forEach(function (p) {
+      var selected = p.available && !!keep[p.id];
+      if (selected) state.selected.push(p.id);
       var div = document.createElement('div');
-      div.className = 'pad' + (p.available ? '' : ' unavailable');
+      div.className = 'pad' + (p.available ? '' : ' unavailable') + (selected ? ' selected' : '');
       div.innerHTML = '<strong>' + escapeHtml(p.name) + '</strong><div class="muted">' +
-        (p.available ? (p.pricePerDay + ' ' + ((state.config && state.config.currency) || 'SEK') + '/dygn') : I18n.t('unavailable')) +
+        escapeHtml(p.available
+          ? p.pricePerDay + ' ' + ((state.config && state.config.currency) || 'SEK') + I18n.t('perDay')
+          : I18n.t('unavailable')) +
         '</div>';
       if (p.available) {
         div.addEventListener('click', function () {
@@ -343,12 +390,13 @@
           if (idx >= 0) state.selected.splice(idx, 1);
           else state.selected.push(p.id);
           div.classList.toggle('selected');
-          $('btnHold').disabled = state.selected.length === 0;
+          $('btnContinue').disabled = state.selected.length === 0;
           updatePriceBox();
         });
       }
       grid.appendChild(div);
     });
+    $('btnContinue').disabled = state.selected.length === 0;
   }
 
   function currentPrice() {
@@ -394,23 +442,62 @@
       '</div>' + priceRows(price);
   }
 
-  function startTimer(expiresAt) {
-    if (state.timerId) clearInterval(state.timerId);
-    function tick() {
-      var ms = new Date(expiresAt).getTime() - Date.now();
-      if (ms <= 0) {
-        $('holdTimer').textContent = '00:00';
-        clearInterval(state.timerId);
-        showErr('errForm', I18n.t('holdExpired'));
-        $('btnSubmit').disabled = true;
-        return;
-      }
-      var m = Math.floor(ms / 60000);
-      var s = Math.floor((ms % 60000) / 1000);
-      $('holdTimer').textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  function renderConflict() {
+    var pads = state.conflictPads;
+    var box = $('conflictAlert');
+    if (!pads || !pads.length) {
+      box.hidden = true;
+      return;
     }
-    tick();
-    state.timerId = setInterval(tick, 1000);
+    var names = joinNames(pads.map(function (p) { return p.name || p.id; }));
+    $('conflictTitle').textContent = I18n.t('conflictTitle');
+    $('conflictText').textContent = I18n.t(pads.length === 1 ? 'conflictOne' : 'conflictMany', { pads: names });
+    $('conflictHint').textContent = I18n.t('conflictHint');
+    box.hidden = false;
+  }
+
+  function hideConflict() {
+    if (!state.conflictPads) return;
+    state.conflictPads = null;
+    renderConflict();
+  }
+
+  /**
+   * Throws away every cached copy of the calendar, on this machine and in the
+   * answer the server would otherwise repeat, so the booking that caused the
+   * collision is actually visible afterwards.
+   */
+  function reloadCalendarFresh() {
+    forgetStoredMonths();
+    state.blocked = {};
+    state.loadedMonths = {};
+    state.fetchedMonths = {};
+    return Promise.all([
+      loadMonth(state.month),
+      ensureMonths(state.startDate, state.endDate)
+    ]);
+  }
+
+  /**
+   * The guest asked for equipment somebody else got first. Nothing was booked,
+   * which the page has to say without any room for doubt, so the form goes away
+   * and an alert takes its place next to the choice that has to be made again.
+   */
+  function showConflict(pads) {
+    var keep = state.selected.slice();
+    state.conflictPads = pads;
+    renderConflict();
+    $('stepForm').hidden = true;
+    scrollToEl($('conflictAlert'));
+    $('conflictAlert').focus({ preventScroll: true });
+
+    Status.during(I18n.t('busyCalendar'), reloadCalendarFresh()).then(function () {
+      renderCalendar();
+      renderPads(padsForRange(state.startDate, state.endDate), keep);
+      updatePriceBox();
+    }).catch(function (err) {
+      showErr('errPads', err.message || I18n.t('error'));
+    });
   }
 
   $('calendar').addEventListener('click', function (ev) {
@@ -440,6 +527,7 @@
     state.startDate = '';
     state.endDate = '';
     state.selected = [];
+    hideConflict();
     $('btnClearDates').hidden = true;
     $('stepPads').hidden = true;
     $('stepForm').hidden = true;
@@ -447,50 +535,31 @@
     updateDateSummary();
   });
 
-  $('btnHold').addEventListener('click', function () {
+  // Nothing is reserved here any more: the selection is only carried to the
+  // form, and the server has the last word when the request is sent.
+  $('btnContinue').addEventListener('click', function () {
     showErr('errPads');
+    hideConflict();
     if (!state.selected.length) return;
-    // An earlier hold of ours would otherwise block the pads we are re-picking;
-    // the server swaps it out as part of the same request.
-    var prev = state.hold;
-    state.hold = null;
-    var work = Api.call('createHold', {
-      padIds: state.selected,
-      startDate: state.startDate,
-      endDate: state.endDate,
-      replaceHoldToken: prev ? prev.holdToken : ''
-    });
-
-    Status.button($('btnHold'), I18n.t('busyHold'), work).then(function (hold) {
-      state.hold = hold;
-      $('stepForm').hidden = false;
-      $('btnSubmit').disabled = false;
-      startTimer(hold.expiresAt);
-      updatePriceBox();
-      window.scrollTo({ top: $('stepForm').offsetTop - 20, behavior: 'smooth' });
-    }).catch(function (err) {
-      showErr('errPads', err.message || I18n.t('error'));
-    });
+    $('stepForm').hidden = false;
+    updatePriceBox();
+    scrollToEl($('stepForm'));
   });
 
-  $('btnCancelHold').addEventListener('click', function () {
-    if (state.hold) {
-      Status.button(
-        $('btnCancelHold'),
-        I18n.t('busyRelease'),
-        Api.call('releaseHold', { holdToken: state.hold.holdToken })
-      ).catch(function () {});
-    }
-    state.hold = null;
+  $('btnBackToPads').addEventListener('click', function () {
+    showErr('errForm');
     $('stepForm').hidden = true;
-    if (state.timerId) clearInterval(state.timerId);
+    scrollToEl($('stepPads'));
   });
 
   $('btnSubmit').addEventListener('click', function () {
     showErr('errForm');
-    if (!state.hold) return;
+    hideConflict();
+    if (!state.selected.length || !state.startDate || !state.endDate) return;
     var payload = {
-      holdToken: state.hold.holdToken,
+      padIds: state.selected.slice(),
+      startDate: state.startDate,
+      endDate: state.endDate,
       firstName: $('firstName').value.trim(),
       lastName: $('lastName').value.trim(),
       email: $('email').value.trim(),
@@ -503,7 +572,6 @@
       return;
     }
     Status.button($('btnSubmit'), I18n.t('busySubmit'), Api.call('submitBooking', payload)).then(function (res) {
-      if (state.timerId) clearInterval(state.timerId);
       forgetStoredMonths();
       $('stepDates').hidden = true;
       $('stepPads').hidden = true;
@@ -514,6 +582,17 @@
       $('manageLink').href = res.manageUrl || ('booking.html?t=' + encodeURIComponent(res.magicToken));
       $('manageLink').textContent = I18n.t('manage');
     }).catch(function (err) {
+      var taken = err && err.code === 'padsUnavailable' && err.details && err.details.unavailablePads;
+      if (taken && taken.length) {
+        showConflict(taken);
+        return;
+      }
+      // Too many submissions at once. The selection is still good, so the form
+      // stays as it is and the guest only has to press again.
+      if (err && err.code === 'systemBusy') {
+        showErr('errForm', I18n.t('tryAgainSoon'));
+        return;
+      }
       showErr('errForm', err.message || I18n.t('error'));
     });
   });

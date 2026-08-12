@@ -5,7 +5,10 @@ Hybrid **GitHub Pages** UI + **Google Apps Script** JSON API with data in **Goog
 ## Features
 
 - Calendar availability for ~10–15 rentable items (crashpads and other equipment)
-- 15-minute hold lock while booking
+- Nothing is reserved while a guest fills in the form. The selection is rechecked when
+  the request is sent, and a collision refuses the whole request — no booking row, no
+  booking number, no mail — while naming the equipment that was taken so the guest can
+  choose again
 - Booking request → admin approval workflow
 - Guest cancellation takes effect immediately and frees the dates
 - Unique booking number (`2026-00042`)

@@ -2,11 +2,15 @@
  * Sheet helpers, schema bootstrap and seed data.
  */
 
+/**
+ * A Holds tab from the removed reservation flow is left alone: it is not in
+ * here, so ensureSchema neither recreates nor touches it, and its rows stay
+ * until someone deletes the tab by hand.
+ */
 var SHEET_NAMES = {
   Users: 'Users',
   Pads: 'Pads',
   PricingRules: 'PricingRules',
-  Holds: 'Holds',
   Bookings: 'Bookings',
   BookingPads: 'BookingPads',
   BookingEvents: 'BookingEvents',
@@ -21,7 +25,6 @@ var HEADERS = {
   Users: ['id', 'email', 'firstName', 'lastName', 'passwordHash', 'salt', 'role', 'active', 'createdAt', 'updatedAt'],
   Pads: ['id', 'name', 'description', 'pricePerDay', 'active', 'sortOrder'],
   PricingRules: ['id', 'dimension', 'minValue', 'percentOff', 'active', 'label'],
-  Holds: ['id', 'holdToken', 'padIds', 'startDate', 'endDate', 'expiresAt', 'status', 'createdAt'],
   Bookings: [
     'id', 'bookingNumber', 'firstName', 'lastName', 'email', 'phone',
     'startDate', 'endDate', 'days', 'locale', 'status',
@@ -91,7 +94,7 @@ function bumpDataVersion_() {
   } catch (e) { /* best effort */ }
 }
 
-function cachedResult_(name, produce, ttlSec) {
+function cachedResult_(name, produce) {
   var cache = CacheService.getScriptCache();
   var key = 'r' + dataVersion_() + '_' + name;
   var hit = cache.get(key);
@@ -99,11 +102,8 @@ function cachedResult_(name, produce, ttlSec) {
     try { return JSON.parse(hit); } catch (e) { /* fall through */ }
   }
   var value = produce();
-  // A TTL callback runs after produce() so it can look at rows the producer has
-  // already read into the per-request cache.
-  var ttl = typeof ttlSec === 'function' ? ttlSec() : ttlSec;
   try {
-    cache.put(key, JSON.stringify(value), ttl || RESULT_TTL_SEC);
+    cache.put(key, JSON.stringify(value), RESULT_TTL_SEC);
   } catch (e) { /* too large to cache */ }
   return value;
 }
@@ -163,8 +163,9 @@ function ensureSchema(force) {
 
 /**
  * Without this, Sheets parses an ISO timestamp into a date cell and reinterprets
- * it in the spreadsheet's timezone, shifting a hold's expiry by the UTC offset.
- * Plain text on the whole column keeps what we wrote, including future rows.
+ * it in the spreadsheet's timezone, shifting a magic link's expiry by the UTC
+ * offset. Plain text on the whole column keeps what we wrote, including future
+ * rows.
  */
 function forceTextTimestamps_(sheet, headers) {
   var rows = sheet.getMaxRows();
@@ -198,7 +199,6 @@ function seedIfEmpty_() {
   }
 
   var config = readConfigMap_();
-  if (!config.holdMinutes) setConfig_('holdMinutes', '15');
   if (!config.defaultPricePerDay) setConfig_('defaultPricePerDay', '150');
   if (!config.currency) setConfig_('currency', 'SEK');
   if (!config.doorCommandTtlSec) setConfig_('doorCommandTtlSec', '30');
@@ -311,9 +311,18 @@ function setConfig_(key, value) {
  */
 var tableCache_ = {};
 
+/**
+ * Drops the memoised rows for one tab without touching the shared result cache.
+ * Only useful when this request must re-read a tab somebody else may have
+ * written since our first read — see withPadLock_.
+ */
+function forgetTable_(sheetName) {
+  delete tableCache_[sheetName];
+}
+
 /** Every write path must call this, or cached reads will go stale. */
 function invalidateTable_(sheetName) {
-  delete tableCache_[sheetName];
+  forgetTable_(sheetName);
   bumpDataVersion_();
 }
 
@@ -344,7 +353,7 @@ function readAllObjects_(sheetName) {
  * Sheets stores date-like text as real date cells, so a read has to put the
  * value back in the shape the code expects. Only these columns are whole days;
  * every other timestamp must keep its time, or expiresAt reads back as midnight
- * and a fresh hold looks hours expired.
+ * and a token that is still valid looks hours expired.
  */
 var DATE_ONLY_FIELDS = { startDate: true, endDate: true };
 

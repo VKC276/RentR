@@ -1,6 +1,7 @@
 (function () {
   var session = localStorage.getItem('adminSession') || '';
   var bookings = [];
+  var passes = [];
   var selectedId = null;
 
   function $(id) { return document.getElementById(id); }
@@ -39,6 +40,8 @@
     availablePadsForBooking: 'Kontrollerar ledig utrustning…',
     listPads: 'Hämtar utrustning…',
     updatePad: 'Sparar pris…',
+    createPad: 'Lägger till utrustning…',
+    setPadActive: 'Uppdaterar utrustning…',
     listPricingRules: 'Hämtar rabattregler…',
     savePricingRule: 'Sparar rabattregel…',
     deletePricingRule: 'Tar bort rabattregel…',
@@ -57,7 +60,7 @@
   }
 
   function showLogin(show) {
-    if (show) closeDetail();
+    if (show) closeAllModals();
     $('loginPanel').hidden = !show;
     $('app').hidden = show;
     $('nav').hidden = show;
@@ -131,43 +134,75 @@
     bookings = list;
     var wrap = $('bookingsList');
     wrap.innerHTML = bookings.map(function (b) {
-      return '<button type="button" class="booking-row" data-id="' + b.id + '">' +
-        '<span class="b-no">' + escapeHtml(b.bookingNumber) + '</span>' +
-        '<span class="b-guest">' + escapeHtml(b.firstName + ' ' + b.lastName) +
+      return '<button type="button" class="list-row booking" data-id="' + b.id + '">' +
+        '<span class="r-no">' + escapeHtml(b.bookingNumber) + '</span>' +
+        '<span class="r-guest">' + escapeHtml(b.firstName + ' ' + b.lastName) +
           '<span class="sub">' + escapeHtml(b.email) + '</span></span>' +
-        '<span class="b-period">' + b.startDate + ' – ' + b.endDate +
+        '<span class="r-period">' + b.startDate + ' – ' + b.endDate +
           '<span class="sub">' + b.days + ' dygn</span></span>' +
-        '<span class="b-status"><span class="badge">' + escapeHtml(statusLabel(b.status)) + '</span></span>' +
-        '<span class="b-price">' + b.priceTotal + ' SEK' +
+        '<span class="r-status"><span class="badge">' + escapeHtml(statusLabel(b.status)) + '</span></span>' +
+        '<span class="r-price">' + b.priceTotal + ' SEK' +
           '<span class="sub"><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' +
           (b.paid ? 'Betald' : 'Obetald') + '</span></span></span>' +
         '</button>';
     }).join('');
     $('bookingsEmpty').hidden = bookings.length > 0;
-    wrap.querySelectorAll('.booking-row').forEach(function (row) {
+    wrap.querySelectorAll('.list-row').forEach(function (row) {
       row.onclick = function () { openDetail(row.getAttribute('data-id')); };
     });
   }
 
-  function closeDetail() {
-    selectedId = null;
-    $('detailModal').hidden = true;
-    document.body.classList.remove('modal-open');
+  function showModal(id) {
+    $(id).hidden = false;
+    document.body.classList.add('modal-open');
   }
 
-  document.querySelectorAll('[data-close-detail]').forEach(function (el) {
-    el.onclick = closeDetail;
+  /** The page only scrolls again once no dialog is left open. */
+  function hideModal(id) {
+    $(id).hidden = true;
+    if (!document.querySelector('.modal:not([hidden])')) {
+      document.body.classList.remove('modal-open');
+    }
+  }
+
+  function closeDetail() {
+    selectedId = null;
+    hideModal('detailModal');
+  }
+
+  function closePass() {
+    hideModal('passModal');
+  }
+
+  var MODAL_CLOSERS = { detailModal: closeDetail, passModal: closePass };
+
+  function closeAllModals() {
+    Object.keys(MODAL_CLOSERS).forEach(function (id) { MODAL_CLOSERS[id](); });
+  }
+
+  // Every dialog closes the same three ways: the cross, a click outside and
+  // Escape, which takes the topmost one.
+  document.querySelectorAll('[data-close-modal]').forEach(function (el) {
+    var modal = el.closest('.modal');
+    el.onclick = function () { MODAL_CLOSERS[modal.id](); };
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !$('detailModal').hidden) closeDetail();
+    if (e.key !== 'Escape') return;
+    var open = document.querySelectorAll('.modal:not([hidden])');
+    if (open.length) MODAL_CLOSERS[open[open.length - 1].id]();
   });
+
+  /** The note beside the box is where the receipt for the save belongs. */
+  function flagCheckbox(id, label, checked) {
+    return '<label class="check"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '> ' +
+      label + ' <span class="check-note" id="' + id + 'Note"></span></label>';
+  }
 
   function openDetail(id) {
     selectedId = id;
     var b = bookings.filter(function (x) { return x.id === id; })[0];
     if (!b) return;
-    $('detailModal').hidden = false;
-    document.body.classList.add('modal-open');
+    showModal('detailModal');
     $('detailTitle').textContent = b.bookingNumber;
     var html = '';
     html += '<p><strong>' + b.bookingNumber + '</strong> — ' + escapeHtml(statusLabel(b.status)) + '</p>';
@@ -176,8 +211,8 @@
     html += '<p>' + b.startDate + ' – ' + b.endDate + ' (' + b.days + ' dygn inkl.)</p>';
     html += '<p>Summa: <strong>' + b.priceTotal + ' SEK</strong></p>';
     html += '<div class="check-row">';
-    html += '<label class="check"><input type="checkbox" id="flagPickup"' + (b.allowSelfPickup ? ' checked' : '') + '> Tillåt egen hämtning</label>';
-    html += '<label class="check"><input type="checkbox" id="flagReturn"' + (b.allowSelfReturn ? ' checked' : '') + '> Tillåt egen återlämning</label>';
+    html += flagCheckbox('flagPickup', 'Tillåt egen hämtning', b.allowSelfPickup);
+    html += flagCheckbox('flagReturn', 'Tillåt egen återlämning', b.allowSelfReturn);
     html += '</div>';
     html += '<div class="actions">';
     if (b.status === 'Requested' || b.status === 'ChangePending') {
@@ -191,7 +226,6 @@
       html += '<button type="button" id="actReturn">Återlämnad</button>';
     }
     html += '<button type="button" class="secondary" id="actPaid">' + (b.paid ? 'Markera obetald' : 'Betald') + '</button>';
-    html += '<button type="button" class="ghost" id="actFlags">Spara flaggor</button>';
     html += '</div>';
     html += '<div id="handOutBox" hidden style="margin-top:1rem;padding:1rem;border:1px solid var(--line);border-radius:12px;"></div>';
     html += '<p class="err" id="detailErr" hidden></p>';
@@ -212,8 +246,8 @@
     }
 
     /** The button reports its own progress, which the status banner cannot do
-     *  from behind the dialog. `extra` is read on click so it sees current
-     *  checkbox values. */
+     *  from behind the dialog. `extra` is read on click so it sees whatever the
+     *  dialog's own fields hold at that moment. */
     function onAct(id, op, extra) {
       var btn = $(id);
       if (!btn) return;
@@ -222,16 +256,58 @@
       };
     }
 
+    /**
+     * The checkbox is the control, so it saves itself the moment it changes —
+     * the other buttons in the dialog act at once too, and a separate save
+     * button only invited a state on screen that was never stored.
+     *
+     * It is disabled while the call is in flight, so a double click cannot
+     * queue a second write and two answers cannot land in the wrong order.
+     */
+    function autoSaveFlag(id, field) {
+      var box = $(id);
+      var note = $(id + 'Note');
+      var seq = 0;
+
+      function setNote(text, cls) {
+        note.className = 'check-note' + (cls ? ' ' + cls : '');
+        note.textContent = text;
+      }
+
+      box.onchange = function () {
+        var value = box.checked;
+        var mine = ++seq;
+        var payload = { op: 'setFlags', bookingId: b.id };
+        payload[field] = value;
+        box.disabled = true;
+        setNote('Sparar…');
+        $('detailErr').hidden = true;
+        api('adminUpdateBooking', payload).then(function () {
+          if (mine !== seq) return;
+          b[field] = value;
+          setNote('Sparat', 'is-ok');
+          setTimeout(function () {
+            if (mine === seq) setNote('');
+          }, 3000);
+        }).catch(function (e) {
+          if (mine !== seq) return;
+          // The box must never show a value the server did not accept.
+          box.checked = !value;
+          setNote('Ej sparat', 'is-err');
+          $('detailErr').hidden = false;
+          $('detailErr').textContent = e.message;
+        }).then(function () {
+          box.disabled = false;
+        });
+      };
+    }
+
     onAct('actApprove', 'approve');
     onAct('actReject', 'reject');
     onAct('actReturn', 'return');
     onAct('actPaid', 'setPaid', { paid: !b.paid });
-    onAct('actFlags', 'setFlags', function () {
-      return {
-        allowSelfPickup: $('flagPickup').checked,
-        allowSelfReturn: $('flagReturn').checked
-      };
-    });
+    autoSaveFlag('flagPickup', 'allowSelfPickup');
+    autoSaveFlag('flagReturn', 'allowSelfReturn');
     if ($('actHandOut')) {
       $('actHandOut').onclick = function () {
         var box = $('handOutBox');
@@ -256,22 +332,115 @@
     }
   }
 
+  /** The same range the server accepts, so a slip is caught before the call. */
+  var MAX_PRICE_PER_DAY = 100000;
+  var PRICE_ERROR = 'Pris per dygn måste vara ett tal mellan 0 och ' + MAX_PRICE_PER_DAY + '.';
+
+  function parsePrice(value) {
+    var price = Number(value);
+    if (String(value).trim() === '' || !isFinite(price) || price < 0 || price > MAX_PRICE_PER_DAY) return null;
+    return price;
+  }
+
+  function showPadErr(message) {
+    $('padErr').hidden = !message;
+    $('padErr').textContent = message || '';
+  }
+
+  function bookedCount(count) {
+    return 'Uppbokad i ' + count + ' kommande bokning' + (count === 1 ? '' : 'ar');
+  }
+
   function renderPads(pads) {
-    var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Namn</th><th>Pris/dygn</th><th></th></tr></thead><tbody>';
-    pads.forEach(function (p) {
-      html += '<tr><td>' + escapeHtml(p.name) + '</td><td><input data-pad="' + p.id + '" type="number" value="' + p.pricePerDay + '" style="max-width:120px" /></td>' +
-        '<td><button type="button" class="secondary" data-save-pad="' + p.id + '">Spara</button></td></tr>';
-    });
-    html += '</tbody></table></div>';
-    $('padsList').innerHTML = html;
-    $('padsList').querySelectorAll('[data-save-pad]').forEach(function (btn) {
+    var list = $('padsList');
+    list.innerHTML = pads.map(function (p) {
+      var sub = [];
+      if (p.description) sub.push(escapeHtml(p.description));
+      if (p.openBookings) sub.push(bookedCount(p.openBookings));
+      return '<div class="pad-item' + (p.active ? '' : ' is-inactive') + '">' +
+        '<div class="pad-name">' + escapeHtml(p.name) +
+          (p.active ? '' : ' <span class="badge">Inaktiv</span>') +
+          (sub.length ? '<span class="sub">' + sub.join(' · ') + '</span>' : '') +
+        '</div>' +
+        '<label class="pad-price">Pris/dygn <input data-pad="' + p.id + '" type="number" min="0" step="1" value="' +
+          escapeHtml(p.pricePerDay) + '" /></label>' +
+        '<div class="pad-actions">' +
+          '<button type="button" class="secondary" data-save-pad="' + p.id + '">Spara</button>' +
+          (p.active
+            ? '<button type="button" class="ghost" data-deactivate-pad="' + p.id + '">Ta bort</button>'
+            : '<button type="button" data-activate-pad="' + p.id + '">Aktivera</button>') +
+        '</div>' +
+        '</div>';
+    }).join('');
+
+    function padById(id) {
+      return pads.filter(function (p) { return p.id === id; })[0] || {};
+    }
+
+    list.querySelectorAll('[data-save-pad]').forEach(function (btn) {
       btn.onclick = function () {
         var id = btn.getAttribute('data-save-pad');
-        var input = $('padsList').querySelector('[data-pad="' + id + '"]');
-        api('updatePad', { padId: id, pricePerDay: Number(input.value) }, btn).then(refreshAll);
+        var price = parsePrice(list.querySelector('[data-pad="' + id + '"]').value);
+        if (price === null) {
+          showPadErr(PRICE_ERROR);
+          return;
+        }
+        showPadErr('');
+        api('updatePad', { padId: id, pricePerDay: price }, btn).then(refreshAll).catch(function (e) {
+          showPadErr(e.message);
+        });
+      };
+    });
+
+    list.querySelectorAll('[data-deactivate-pad]').forEach(function (btn) {
+      btn.onclick = function () {
+        var p = padById(btn.getAttribute('data-deactivate-pad'));
+        // Deactivating a booked resource is allowed — a pad that breaks has to
+        // come off the market whether or not it is spoken for — but the admin
+        // is told, since the bookings themselves keep it.
+        var booked = p.openBookings ? '\n\nOBS: ' + bookedCount(p.openBookings) + '. De bokningarna behåller utrustningen.' : '';
+        if (!confirm('Ta bort ' + p.name + '?\n\nUtrustningen avaktiveras: den försvinner ur gästens kalender men finns kvar på tidigare bokningar och kan aktiveras igen.' + booked)) return;
+        setPadActive(p.id, false, btn);
+      };
+    });
+
+    list.querySelectorAll('[data-activate-pad]').forEach(function (btn) {
+      btn.onclick = function () {
+        setPadActive(btn.getAttribute('data-activate-pad'), true, btn);
       };
     });
   }
+
+  function setPadActive(padId, active, btn) {
+    showPadErr('');
+    api('setPadActive', { padId: padId, active: active }, btn).then(refreshAll).catch(function (e) {
+      showPadErr(e.message);
+    });
+  }
+
+  $('btnCreatePad').onclick = function () {
+    var name = $('padName').value.trim();
+    var price = parsePrice($('padPrice').value);
+    if (!name) {
+      showPadErr('Ange ett namn på utrustningen.');
+      return;
+    }
+    if (price === null) {
+      showPadErr(PRICE_ERROR);
+      return;
+    }
+    showPadErr('');
+    api('createPad', {
+      name: name,
+      description: $('padDesc').value.trim(),
+      pricePerDay: price
+    }, $('btnCreatePad')).then(function () {
+      $('padName').value = $('padDesc').value = '';
+      return refreshAll();
+    }).catch(function (e) {
+      showPadErr(e.message);
+    });
+  };
 
   function renderRules(rules) {
     var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Dim</th><th>Min</th><th>%</th><th>Label</th><th></th></tr></thead><tbody>';
@@ -333,22 +502,57 @@
     });
   };
 
-  function renderPasses(passes) {
-    var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Giltig</th><th>Status</th><th></th></tr></thead><tbody>';
-    passes.forEach(function (p) {
-      html += '<tr><td>' + escapeHtml(p.recipientName) + '</td><td>' + escapeHtml(p.recipientEmail) + '</td>' +
-        '<td>' + p.startDate + ' – ' + p.endDate + '</td>' +
-        '<td>' + (p.revoked ? 'Återkallad' : (p.validToday ? 'Gäller idag' : 'Utanför period')) + '</td>' +
-        '<td>' + (p.revoked ? '' : '<button type="button" class="ghost" data-revoke-pass="' + p.id + '">Återkalla</button>') + '</td></tr>';
+  /** A door pass is not a booking, so its state is not in STATUS_LABELS. */
+  function passState(p) {
+    if (p.revoked) return 'Återkallad';
+    return p.validToday ? 'Gäller idag' : 'Utanför period';
+  }
+
+  function renderPasses(list) {
+    passes = list;
+    var wrap = $('dpList');
+    wrap.innerHTML = passes.map(function (p) {
+      return '<button type="button" class="list-row pass" data-pass="' + p.id + '">' +
+        '<span class="r-who">' + escapeHtml(p.recipientName) +
+          '<span class="sub">' + escapeHtml(p.recipientEmail) + '</span></span>' +
+        '<span class="r-period">' + p.startDate + ' – ' + p.endDate + '</span>' +
+        '<span class="r-status"><span class="badge">' + escapeHtml(passState(p)) + '</span></span>' +
+        '</button>';
+    }).join('');
+    $('dpEmpty').hidden = passes.length > 0;
+    wrap.querySelectorAll('.list-row').forEach(function (row) {
+      row.onclick = function () { openPass(row.getAttribute('data-pass')); };
     });
-    html += '</tbody></table></div>';
-    $('dpList').innerHTML = html;
-    $('dpList').querySelectorAll('[data-revoke-pass]').forEach(function (btn) {
-      btn.onclick = function () {
-        if (!confirm('Återkalla dörrlänk?')) return;
-        api('revokeDoorPass', { passId: btn.getAttribute('data-revoke-pass') }, btn).then(refreshAll);
+  }
+
+  function openPass(id) {
+    var p = passes.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    showModal('passModal');
+    $('passTitle').textContent = p.recipientName;
+    var html = '';
+    html += '<p><strong>' + escapeHtml(p.recipientName) + '</strong> — ' + escapeHtml(passState(p)) + '</p>';
+    html += '<p>' + escapeHtml(p.recipientEmail) + '</p>';
+    html += '<p>Giltig ' + p.startDate + ' – ' + p.endDate + ' (inkl.)</p>';
+    if (!p.revoked) {
+      html += '<div class="actions"><button type="button" class="ghost" id="passRevoke">Återkalla länken</button></div>';
+    }
+    html += '<p class="err" id="passErr" hidden></p>';
+    $('passDetail').innerHTML = html;
+
+    if ($('passRevoke')) {
+      $('passRevoke').onclick = function () {
+        if (!confirm('Återkalla dörrlänken till ' + p.recipientName + '? Länken slutar fungera direkt.')) return;
+        api('revokeDoorPass', { passId: p.id }, $('passRevoke')).then(function () {
+          return refreshAll();
+        }).then(function () {
+          openPass(p.id);
+        }).catch(function (e) {
+          $('passErr').hidden = false;
+          $('passErr').textContent = e.message;
+        });
       };
-    });
+    }
   }
 
   $('btnSendDoorPass').onclick = function () {

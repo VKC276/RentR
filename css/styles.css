@@ -331,18 +331,52 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   margin-top: 0.75rem;
 }
 .price-box strong { font-size: 1.25rem; }
-.hold-timer {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  color: var(--accent2);
+
+/* A booking that was refused has to stop the guest where a line of red text
+   would not: nothing was saved, and the only way on is to choose again. */
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 2px solid var(--danger);
+  border-radius: var(--radius);
+  background: #fbe9e7;
+  box-shadow: 0 8px 22px rgba(163, 32, 32, 0.14);
 }
-/* Bookings are rows of buttons rather than a table: the whole row is the tap
-   target, so nothing has to be scrolled into reach on a narrow screen. */
-.booking-list { display: grid; gap: 0.5rem; }
-.booking-row {
+.alert-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.alert-body { min-width: 0; }
+.alert-title {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  color: var(--danger);
+}
+.alert-text { display: block; margin-top: 0.25rem; font-size: 0.95rem; }
+.alert-hint { color: var(--muted); font-size: 0.9rem; }
+.alert:focus { outline: none; }
+.alert:focus-visible { outline: 2px solid var(--danger); outline-offset: 3px; }
+/* Bookings and door passes are rows of buttons rather than tables: the whole
+   row is the tap target, so nothing has to be scrolled into reach on a narrow
+   screen. The frame is shared; only the columns differ per list. */
+.list-rows { display: grid; gap: 0.5rem; }
+.list-row {
   display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr) 11.5rem 8rem 8rem;
-  grid-template-areas: "no guest period status price";
   gap: 0.35rem 1rem;
   align-items: center;
   width: 100%;
@@ -356,31 +390,79 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-.booking-row:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(26, 43, 51, 0.09); }
-.booking-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.booking-row .b-no { grid-area: no; font-weight: 700; font-variant-numeric: tabular-nums; }
-.booking-row .b-guest { grid-area: guest; min-width: 0; }
-.booking-row .b-period { grid-area: period; white-space: nowrap; }
-.booking-row .b-status { grid-area: status; }
-.booking-row .b-price { grid-area: price; text-align: right; }
-.booking-row .sub {
+.list-row:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(26, 43, 51, 0.09); }
+.list-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.list-row.booking {
+  grid-template-columns: 7rem minmax(0, 1fr) 11.5rem 8rem 8rem;
+  grid-template-areas: "no guest period status price";
+}
+.list-row.pass {
+  grid-template-columns: minmax(0, 1fr) 11.5rem 9rem;
+  grid-template-areas: "who period status";
+}
+.list-row .r-no { grid-area: no; font-weight: 700; font-variant-numeric: tabular-nums; }
+.list-row .r-guest { grid-area: guest; min-width: 0; }
+.list-row .r-who { grid-area: who; min-width: 0; font-weight: 600; }
+.list-row .r-period { grid-area: period; white-space: nowrap; }
+.list-row .r-status { grid-area: status; }
+.list-row .r-price { grid-area: price; text-align: right; }
+.list-row .sub {
   display: block;
   font-size: 0.8rem;
+  font-weight: 400;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 @media (max-width: 720px) {
-  .booking-row {
+  .list-row.booking {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "no status"
       "guest price"
       "period period";
   }
-  .booking-row .b-status { text-align: right; }
-  .booking-row .b-period { color: var(--muted); font-size: 0.85rem; }
+  .list-row.pass {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "who status"
+      "period period";
+  }
+  .list-row .r-status { text-align: right; }
+  .list-row .r-period { color: var(--muted); font-size: 0.85rem; }
+}
+
+/* The price is edited in place, so a resource cannot be a single button the
+   way a booking row is; it wraps into a card instead of scrolling sideways. */
+.pad-list { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
+.pad-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.pad-item.is-inactive { background: #f4f6f7; color: var(--muted); }
+.pad-name { flex: 1 1 11rem; min-width: 0; font-weight: 600; }
+.pad-name .sub {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pad-price { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+.pad-price input { width: 6rem; padding: 0.45rem 0.55rem; }
+.pad-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-left: auto; }
+@media (max-width: 640px) {
+  .pad-price { flex: 1 1 100%; }
+  .pad-actions { margin-left: 0; flex: 1 1 100%; }
+  .pad-actions > button { flex: 1 1 8rem; min-height: 2.75rem; }
 }
 
 /* The detail used to open in a panel further down the page, which was easy to
@@ -430,6 +512,10 @@ label.check {
   cursor: pointer;
 }
 label.check input { width: auto; margin: 0; }
+/* The checkbox saves itself, so it says so right where it was clicked. */
+.check-note { font-size: 0.8rem; color: var(--muted); }
+.check-note.is-ok { color: var(--ok); }
+.check-note.is-err { color: var(--danger); }
 button.icon { padding: 0.4rem 0.6rem; line-height: 1; }
 body.modal-open { overflow: hidden; }
 @media (max-width: 640px) {

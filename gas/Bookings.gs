@@ -142,14 +142,21 @@ function computeOpenDoorFlags_(b) {
   return { showOpenDoor: false, showConfirmReturn: false, mode: null };
 }
 
+/**
+ * Nothing is reserved while the guest fills in the form, so the selection is
+ * only checked here — and it is all or nothing. Every line below the
+ * availability check writes something the guest would have to be told about:
+ * a booking number that would be skipped, rows that would make up half a
+ * booking, a mail promising equipment somebody else has. So the check comes
+ * first, under the lock that keeps its answer true until the rows exist, and a
+ * conflict leaves the spreadsheet exactly as it was.
+ */
 function submitBooking_(payload) {
-  // The hold is only consumed once the booking rows exist. Consuming it up
-  // front meant any later failure burned it, and the retry hit
-  // "Hold ogiltig eller utgången" while the countdown still looked fine.
-  var hold = requireActiveHold_(payload.holdToken);
-  var padIds = parsePadIds_(hold.padIds);
-  var startDate = hold.startDate;
-  var endDate = hold.endDate;
+  var padIds = parsePadIds_(payload.padIds);
+  var startDate = String(payload.startDate || '');
+  var endDate = String(payload.endDate || '');
+  if (!padIds.length) throw softError_('Välj utrustning att boka', 400);
+  calcDays_(startDate, endDate); // validate the range
 
   var firstName = String(payload.firstName || '').trim();
   var lastName = String(payload.lastName || '').trim();
@@ -161,49 +168,62 @@ function submitBooking_(payload) {
     throw softError_('Förnamn, efternamn, e-post och telefon krävs', 400);
   }
 
-  // This booking's own hold must not count as a conflict against itself.
-  assertPadsAvailable_(padIds, startDate, endDate, null, hold.holdToken);
+  // Pure reads, and none of them touch what the lock protects. Pricing an
+  // inactive pad or an impossible range fails here, before anyone else has to
+  // queue behind us.
   var price = calculatePrice_(padIds, startDate, endDate);
-  var bookingNumber = nextBookingNumber_();
-  var id = uid_();
-  var now = nowIso_();
 
-  appendObject_(SHEET_NAMES.Bookings, {
-    id: id,
-    bookingNumber: bookingNumber,
-    firstName: firstName,
-    lastName: lastName,
-    email: email,
-    phone: phone,
-    startDate: startDate,
-    endDate: endDate,
-    days: price.days,
-    locale: locale,
-    status: 'Requested',
-    allowSelfPickup: false,
-    allowSelfReturn: false,
-    paid: false,
-    paidAt: '',
-    priceBase: price.priceBase,
-    priceDiscount: price.priceDiscount,
-    priceTotal: price.priceTotal,
-    priceOverride: '',
-    priceBreakdownJson: JSON.stringify(price),
-    doorOpenedForReturn: false,
-    notes: String(payload.notes || ''),
-    createdAt: now,
-    updatedAt: now
+  // Only what has to be indivisible: the check, and the rows that make the pads
+  // taken. The moment the BookingPads rows exist, the next request's check sees
+  // them, so the lock can be handed on before the mails and the magic link.
+  var created = withPadLock_(function () {
+    assertPadsAvailable_(padIds, startDate, endDate);
+
+    // ---- First write of the request. Nothing above it writes, and nothing
+    // below it runs on a conflict. The counter is in here too: it is a
+    // read-modify-write of its own, and two bookings at once could otherwise
+    // be handed the same number.
+    var bookingNumber = nextBookingNumber_();
+    var id = uid_();
+    var now = nowIso_();
+
+    appendObject_(SHEET_NAMES.Bookings, {
+      id: id,
+      bookingNumber: bookingNumber,
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      phone: phone,
+      startDate: startDate,
+      endDate: endDate,
+      days: price.days,
+      locale: locale,
+      status: 'Requested',
+      allowSelfPickup: false,
+      allowSelfReturn: false,
+      paid: false,
+      paidAt: '',
+      priceBase: price.priceBase,
+      priceDiscount: price.priceDiscount,
+      priceTotal: price.priceTotal,
+      priceOverride: '',
+      priceBreakdownJson: JSON.stringify(price),
+      doorOpenedForReturn: false,
+      notes: String(payload.notes || ''),
+      createdAt: now,
+      updatedAt: now
+    });
+
+    padIds.forEach(function (pid) {
+      appendObject_(SHEET_NAMES.BookingPads, { bookingId: id, padId: pid });
+    });
+
+    return { id: id, bookingNumber: bookingNumber };
   });
 
-  padIds.forEach(function (pid) {
-    appendObject_(SHEET_NAMES.BookingPads, { bookingId: id, padId: pid });
-  });
-
-  updateObjectById_(SHEET_NAMES.Holds, hold.id, { status: 'consumed' });
-
-  var magic = createMagicToken_(id);
-  logEvent_(id, 'created', email, { bookingNumber: bookingNumber });
-  var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, id));
+  var magic = createMagicToken_(created.id);
+  logEvent_(created.id, 'created', email, { bookingNumber: created.bookingNumber });
+  var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, created.id));
   try {
     mailBookingCreated_(booking, magic);
     mailAdminNewRequest_(booking);
@@ -212,7 +232,7 @@ function submitBooking_(payload) {
   }
   return {
     booking: booking,
-    bookingNumber: bookingNumber,
+    bookingNumber: created.bookingNumber,
     magicToken: magic,
     manageUrl: manageUrl_(magic)
   };
@@ -262,10 +282,10 @@ function guestRequestChange_(token, payload) {
 
   var patch = { status: 'ChangePending', updatedAt: nowIso_() };
   var detail = { requested: payload };
+  var padIds = null;
 
   if (payload.startDate && payload.endDate && payload.padIds) {
-    var padIds = payload.padIds.map(String);
-    assertPadsAvailable_(padIds, payload.startDate, payload.endDate, b.id);
+    padIds = payload.padIds.map(String);
     var price = calculatePrice_(padIds, payload.startDate, payload.endDate);
     patch.startDate = payload.startDate;
     patch.endDate = payload.endDate;
@@ -274,10 +294,22 @@ function guestRequestChange_(token, payload) {
     patch.priceDiscount = price.priceDiscount;
     patch.priceTotal = price.priceTotal;
     patch.priceBreakdownJson = JSON.stringify(price);
-    replaceBookingPads_(b.id, padIds);
   }
 
-  updateObjectById_(SHEET_NAMES.Bookings, b.id, patch);
+  if (padIds) {
+    // The same race as a new booking, with one twist: the dates decide what the
+    // pads block, so the pads and the dates have to land together or a check in
+    // between weighs the new pads against the old period.
+    withPadLock_(function () {
+      assertPadsAvailable_(padIds, payload.startDate, payload.endDate, b.id);
+      replaceBookingPads_(b.id, padIds);
+      updateObjectById_(SHEET_NAMES.Bookings, b.id, patch);
+    });
+  } else {
+    // Nothing here changes what the booking occupies, so it needs no lock.
+    updateObjectById_(SHEET_NAMES.Bookings, b.id, patch);
+  }
+
   logEvent_(b.id, 'change_requested', b.email, detail);
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, b.id));
   try { mailAdminChange_(booking); } catch (e) {}
@@ -383,9 +415,15 @@ function adminUpdateBooking_(bookingId, payload, actor) {
   } else if (action === 'handOut') {
     if (payload.padId) {
       var newPad = String(payload.padId);
-      assertPadsAvailable_([newPad], b.startDate, b.endDate, b.id);
-      replaceBookingPads_(b.id, [newPad]);
       var price = calculatePrice_([newPad], b.startDate, b.endDate);
+      // Swapping a pad in allocates it exactly as a new booking does, and a
+      // guest may be submitting the same one right now. The period is not
+      // changing here, so the row that decides it is already right and only the
+      // pads have to be indivisible.
+      withPadLock_(function () {
+        assertPadsAvailable_([newPad], b.startDate, b.endDate, b.id);
+        replaceBookingPads_(b.id, [newPad]);
+      });
       patch.priceBase = price.priceBase;
       patch.priceDiscount = price.priceDiscount;
       patch.priceTotal = price.priceTotal;

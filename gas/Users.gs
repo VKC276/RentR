@@ -85,8 +85,26 @@ function deleteUser_(userId, actor) {
   return { ok: true };
 }
 
-function softError_(message, status) {
+/**
+ * The message is Swedish, which suits the admin pages but not a guest reading
+ * in English or German. An error that a guest page has to phrase itself also
+ * carries a machine-readable code and whatever data the sentence needs.
+ */
+function softError_(message, status, code, details) {
   var err = new Error(message);
   err.status = status || 400;
+  if (code) err.code = code;
+  if (details) err.details = details;
   return err;
+}
+
+/** The JSON body for a thrown error, from either entry point. */
+function errorBody_(err) {
+  var body = {
+    error: (err && err.message) || String(err),
+    status: (err && err.status) || 500
+  };
+  if (err && err.code) body.code = err.code;
+  if (err && err.details) body.details = err.details;
+  return body;
 }

@@ -120,10 +120,105 @@ function calculatePrice_(padIds, startDate, endDate) {
   };
 }
 
+/**
+ * How many bookings still reserve each pad and have not run out. The admin list
+ * shows this before deactivating, so taking a resource out of circulation is
+ * never a surprise.
+ */
+function openBookingsByPad_() {
+  var today = todayYmd_();
+  var openBookings = {};
+  readAllObjects_(SHEET_NAMES.Bookings).forEach(function (b) {
+    if (BLOCKING_STATUSES[b.status] && String(b.endDate) >= today) openBookings[b.id] = true;
+  });
+  var counts = {};
+  readAllObjects_(SHEET_NAMES.BookingPads).forEach(function (bp) {
+    if (openBookings[bp.bookingId]) counts[bp.padId] = (counts[bp.padId] || 0) + 1;
+  });
+  return counts;
+}
+
 function listPadsAdmin_() {
+  var counts = openBookingsByPad_();
   return readAllObjects_(SHEET_NAMES.Pads).sort(function (a, b) {
     return Number(a.sortOrder) - Number(b.sortOrder);
+  }).map(function (p) {
+    // The sheet gives back either a checkbox boolean or the text; the admin
+    // page should not have to know which.
+    p.active = p.active === true || p.active === 'true';
+    p.openBookings = counts[p.id] || 0;
+    return p;
   });
+}
+
+/** A price nobody could have meant, so a slip of the keyboard is caught here. */
+var MAX_PRICE_PER_DAY = 100000;
+
+function parsePricePerDay_(value) {
+  var price = Number(value);
+  if (value === '' || value === null || typeof value === 'undefined' ||
+      !isFinite(price) || price < 0 || price > MAX_PRICE_PER_DAY) {
+    throw softError_('Pris per dygn måste vara ett tal mellan 0 och ' + MAX_PRICE_PER_DAY, 400);
+  }
+  return price;
+}
+
+/** Keeps the seeded pad-01… ids going, skipping any number already in use. */
+function nextPadId_(pads) {
+  var taken = {};
+  var highest = 0;
+  pads.forEach(function (p) {
+    taken[String(p.id)] = true;
+    var m = String(p.id).match(/^pad-(\d+)$/);
+    if (m) highest = Math.max(highest, Number(m[1]));
+  });
+  var id;
+  do {
+    highest++;
+    id = 'pad-' + pad(highest, 2);
+  } while (taken[id]);
+  return id;
+}
+
+function createPad_(payload, actor) {
+  var name = String(payload.name || '').trim();
+  if (!name) throw softError_('Namn krävs', 400);
+  var price = parsePricePerDay_(payload.pricePerDay);
+
+  var pads = readAllObjects_(SHEET_NAMES.Pads);
+  var lastOrder = 0;
+  pads.forEach(function (p) {
+    var order = Number(p.sortOrder);
+    if (isFinite(order)) lastOrder = Math.max(lastOrder, order);
+  });
+
+  var row = {
+    id: nextPadId_(pads),
+    name: name,
+    description: String(payload.description || '').trim(),
+    pricePerDay: price,
+    active: true,
+    sortOrder: lastOrder + 1
+  };
+  appendObject_(SHEET_NAMES.Pads, row);
+  logEvent_(row.id, 'pad_created', actor.email, { name: row.name, pricePerDay: row.pricePerDay });
+  return row;
+}
+
+/**
+ * Removing a resource means deactivating it. BookingPads refers to this id, so
+ * deleting the row would leave past bookings unable to name what was rented.
+ * activePads_ is what the guest calendar and availability are built from, so
+ * dropping out of it is enough to take the resource off the market — and the
+ * write bumps the data version, which clears the cached answers.
+ */
+function setPadActive_(padId, active, actor) {
+  var padRow = findById_(SHEET_NAMES.Pads, padId);
+  if (!padRow) throw softError_('Utrustning saknas', 404);
+  var next = active === true || active === 'true';
+  updateObjectById_(SHEET_NAMES.Pads, padId, { active: next });
+  logEvent_(padId, next ? 'pad_activated' : 'pad_deactivated', actor.email, { name: padRow.name });
+  return listPadsAdmin_().filter(function (p) { return p.id === padId; })[0];
 }
 
 function updatePad_(padId, payload) {
@@ -133,6 +228,7 @@ function updatePad_(padId, payload) {
   ['name', 'description', 'pricePerDay', 'active', 'sortOrder'].forEach(function (k) {
     if (typeof payload[k] !== 'undefined') patch[k] = payload[k];
   });
+  if (typeof patch.pricePerDay !== 'undefined') patch.pricePerDay = parsePricePerDay_(patch.pricePerDay);
   updateObjectById_(SHEET_NAMES.Pads, padId, patch);
   return findById_(SHEET_NAMES.Pads, padId);
 }

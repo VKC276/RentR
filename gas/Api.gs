@@ -22,8 +22,8 @@ function handleApi_(e) {
     var result = routeIdempotent_(action, body, sessionToken, e);
     return jsonResponse_(result);
   } catch (err) {
-    var status = err.status || 500;
-    return jsonResponse_({ error: err.message || String(err), status: status }, status);
+    var body = errorBody_(err);
+    return jsonResponse_(body, body.status);
   }
 }
 
@@ -31,7 +31,7 @@ function handleApi_(e) {
  * script.googleusercontent.com intermittently serves a Drive error page instead
  * of the script output. The script has already run at that point, so the client
  * retries with the same requestId and gets the stored response back rather than
- * creating a second hold or booking.
+ * creating a second booking.
  *
  * Only successful results are stored; a thrown error re-runs on retry.
  */
@@ -74,10 +74,6 @@ function route_(action, body, sessionToken, e) {
         config: getPublicConfig_(),
         calendar: getCalendar_(body.from, body.to)
       };
-    case 'createHold':
-      return createHold_(body.padIds, body.startDate, body.endDate, body.replaceHoldToken);
-    case 'releaseHold':
-      return releaseHold_(body.holdToken);
     case 'submitBooking':
       return submitBooking_(body);
     case 'lookupBooking':
@@ -136,6 +132,12 @@ function route_(action, body, sessionToken, e) {
     case 'updatePad':
       requireAdmin_(sessionToken);
       return { pad: updatePad_(body.padId, body) };
+    case 'createPad':
+      return { pad: createPad_(body, requireAdmin_(sessionToken)) };
+    // Removing a resource deactivates it; the row stays so old bookings keep
+    // the name of what they rented.
+    case 'setPadActive':
+      return { pad: setPadActive_(body.padId, body.active, requireAdmin_(sessionToken)) };
     case 'listPricingRules':
       requireAdmin_(sessionToken);
       return { rules: listPricingRulesAdmin_() };

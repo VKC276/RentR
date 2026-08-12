@@ -44,7 +44,7 @@
           </div>
         </div>
         <p><button type="button" id="btnReload">Uppdatera</button></p>
-        <div class="booking-list" id="bookingsList"></div>
+        <div class="list-rows" id="bookingsList"></div>
         <p class="muted" id="bookingsEmpty" hidden>Inga bokningar matchar.</p>
       </div>
 
@@ -71,13 +71,22 @@
         <p class="ok" id="dpOk" hidden></p>
         <p class="err" id="dpErr" hidden></p>
         <h3>Skickade länkar</h3>
-        <div id="dpList"></div>
+        <div class="list-rows" id="dpList"></div>
+        <p class="muted" id="dpEmpty" hidden>Inga länkar har skickats.</p>
       </div>
 
       <div class="panel" id="pricingSection">
         <h2>Priser & rabatter</h2>
         <h3>Utrustning</h3>
-        <div id="padsList"></div>
+        <div class="pad-list" id="padsList"></div>
+        <h3>Ny utrustning</h3>
+        <div class="row">
+          <div><label>Namn</label><input id="padName" placeholder="Crashpad 13" /></div>
+          <div><label>Beskrivning</label><input id="padDesc" placeholder="Valfritt" /></div>
+          <div><label>Pris/dygn</label><input id="padPrice" type="number" min="0" step="1" value="150" /></div>
+        </div>
+        <p><button type="button" id="btnCreatePad">Lägg till utrustning</button></p>
+        <p class="err" id="padErr" hidden></p>
         <h3>Rabattstege</h3>
         <div id="rulesList"></div>
         <div class="row">
@@ -109,13 +118,27 @@
   </div>
 
   <div class="modal" id="detailModal" hidden>
-    <div class="modal-backdrop" data-close-detail></div>
+    <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
       <div class="modal-head">
         <h2 id="detailTitle">Bokningsdetalj</h2>
-        <button type="button" class="ghost icon" data-close-detail aria-label="Stäng">&#10005;</button>
+        <button type="button" class="ghost icon" data-close-modal aria-label="Stäng">&#10005;</button>
       </div>
       <div class="modal-body" id="detail"></div>
+    </div>
+  </div>
+
+  <!-- Its own dialog rather than a shared one: a booking and a door pass have
+       nothing in common but the frame, and one render function per dialog is
+       easier to follow than one that switches on what it was handed. -->
+  <div class="modal" id="passModal" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="passTitle">
+      <div class="modal-head">
+        <h2 id="passTitle">Dörrlänk</h2>
+        <button type="button" class="ghost icon" data-close-modal aria-label="Stäng">&#10005;</button>
+      </div>
+      <div class="modal-body" id="passDetail"></div>
     </div>
   </div>
 

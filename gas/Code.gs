@@ -20,7 +20,7 @@ function doGet(e) {
     if (e.parameter.payload) {
       try { body = JSON.parse(e.parameter.payload); } catch (err) { body = {}; }
     }
-    ['startDate', 'endDate', 'bookingNumber', 'email', 't', 'apiKey', 'commandId', 'holdToken', 'bookingId', 'userId', 'padId', 'id'].forEach(function (k) {
+    ['startDate', 'endDate', 'bookingNumber', 'email', 't', 'apiKey', 'commandId', 'bookingId', 'userId', 'padId', 'id'].forEach(function (k) {
       if (e.parameter[k] != null && e.parameter[k] !== '' && body[k] == null) body[k] = e.parameter[k];
     });
     if (e.parameter.t) body.magicToken = e.parameter.t;
@@ -34,14 +34,13 @@ function doGet(e) {
     }
     return jsonResponse_(result);
   } catch (err) {
-    var status = err.status || 500;
-    var errObj = { error: err.message || String(err), status: status };
+    var errObj = errorBody_(err);
     if (e.parameter && e.parameter.callback) {
       return ContentService
         .createTextOutput(e.parameter.callback + '(' + JSON.stringify(errObj) + ')')
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
-    return jsonResponse_(errObj, status);
+    return jsonResponse_(errObj, errObj.status);
   }
 }
 
@@ -55,45 +54,4 @@ function doPost(e) {
 function setupSpreadsheet() {
   ensureSchema(true);
   Logger.log('Schema + seed klart. Standardadmin: admin@example.com / Admin123!');
-}
-
-/**
- * Run manually to see how a hold survives the round trip through Sheets. Shows
- * whether expiresAt comes back as text or as a date cell, and whether the
- * expiry the code reads matches the one that was written.
- */
-function diagnoseHolds() {
-  var sheet = getSheet_(SHEET_NAMES.Holds);
-  var values = sheet.getDataRange().getValues();
-  var headers = values[0].map(String);
-  var expiresCol = headers.indexOf('expiresAt');
-  var statusCol = headers.indexOf('status');
-
-  var out = [
-    'Nu (UTC):        ' + new Date().toISOString(),
-    'Tidszon script:  ' + Session.getScriptTimeZone(),
-    'Tidszon ark:     ' + getSpreadsheet_().getSpreadsheetTimeZone(),
-    'Antal holdrader: ' + Math.max(0, values.length - 1),
-    ''
-  ];
-
-  for (var i = Math.max(1, values.length - 5); i < values.length; i++) {
-    var raw = values[i][expiresCol];
-    var normalized = normalizeCell_(raw, 'expiresAt');
-    var msLeft = new Date(normalized).getTime() - Date.now();
-    out.push(
-      'rad ' + (i + 1) +
-      ' | status=' + values[i][statusCol] +
-      ' | celltyp=' + Object.prototype.toString.call(raw) +
-      ' | format=' + sheet.getRange(i + 1, expiresCol + 1).getNumberFormat() +
-      ' | rå=' + raw +
-      ' | tolkad=' + normalized +
-      ' | kvar=' + Math.round(msLeft / 1000) + ' s'
-    );
-  }
-
-  out.push('', 'getActiveHolds_ ser ' + getActiveHolds_().length + ' aktiva holds');
-  var text = out.join('\n');
-  Logger.log(text);
-  return text;
 }

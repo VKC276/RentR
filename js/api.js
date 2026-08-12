@@ -42,6 +42,10 @@
       var err = new Error(data.error);
       err.status = data.status || 500;
       err.fromServer = true;
+      // The message is Swedish. A page that has to phrase the failure itself
+      // switches on code and reads whatever the sentence needs from details.
+      if (data.code) err.code = data.code;
+      if (data.details) err.details = data.details;
       throw err;
     }
     return data;
