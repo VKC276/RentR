@@ -31,15 +31,35 @@ DEFAULT_API_URL = "https://rentr-api.muddy-rice-38d4.workers.dev"
 USER_AGENT = "VKK-Rental-Pi/2.0"
 
 
-def load_env_file(path: str | Path) -> None:
-    """Load KEY=VALUE lines into os.environ if the key is not already set."""
+def bootstrap_env() -> None:
+    """Load env files. Later files override earlier ones.
+
+    Priority (highest last): package .env → /etc/rentr-door.env → ENV_FILE.
+    """
+    explicit = os.environ.get("ENV_FILE", "").strip()
+    candidates = [
+        Path(__file__).resolve().parent / ".env",
+        "/etc/rentr-door.env",
+    ]
+    if explicit:
+        candidates.append(explicit)
+    for c in candidates:
+        load_env_file(c, override=True)
+
+
+def load_env_file(path: str | Path, override: bool = False) -> None:
+    """Load KEY=VALUE lines into os.environ."""
     p = Path(path)
     if not p.is_file():
         return
     try:
         lines = p.read_text(encoding="utf-8").splitlines()
     except PermissionError:
-        print(f"Kan inte läsa {p} (behörighet). Kör som tjänst eller fixa chmod/chown.", file=sys.stderr)
+        print(
+            f"Kan inte läsa {p} (behörighet). Kör: sudo chown root:$USER {p} && sudo chmod 640 {p}",
+            file=sys.stderr,
+            flush=True,
+        )
         return
     for raw in lines:
         line = raw.strip()
@@ -48,19 +68,10 @@ def load_env_file(path: str | Path) -> None:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip().strip("'").strip('"')
-        if key and key not in os.environ:
+        if not key:
+            continue
+        if override or key not in os.environ:
             os.environ[key] = value
-
-
-def bootstrap_env() -> None:
-    explicit = os.environ.get("ENV_FILE", "").strip()
-    candidates = []
-    if explicit:
-        candidates.append(explicit)
-    candidates.append(Path(__file__).resolve().parent / ".env")
-    candidates.append("/etc/rentr-door.env")
-    for c in candidates:
-        load_env_file(c)
 
 
 def env_bool(name: str, default: str = "0") -> bool:

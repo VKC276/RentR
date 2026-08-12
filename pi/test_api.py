@@ -16,19 +16,32 @@ print("env loaded", flush=True)
 
 
 def main() -> None:
-    if not dl.API_KEY:
+    key = dl.API_KEY
+    if not key:
         print(
-            "PI_API_KEY saknas. Sätt i /etc/rentr-door.env (läsbar för din user) eller pi/.env",
+            "PI_API_KEY saknas. Sätt i /etc/rentr-door.env eller ta bort gammal pi/.env",
             file=sys.stderr,
             flush=True,
         )
         sys.exit(1)
+
+    # Show fingerprint only — never print the full secret.
     print(f"API_URL = {dl.API_URL}", flush=True)
+    print(
+        f"PI_API_KEY length={len(key)} prefix={key[:3]!r} suffix={key[-3:]!r}",
+        flush=True,
+    )
     print("Calling pollDoor (timeout 30s)…", flush=True)
     try:
         data = dl.api_call("pollDoor")
     except Exception as exc:  # noqa: BLE001
         print(f"FAIL: {exc}", file=sys.stderr, flush=True)
+        print(
+            "Tips: samma ASCII-nyckel i Worker DOOR_API_KEY och /etc/rentr-door.env; "
+            "ta bort ~/RentR/pi/.env om den har en gammal nyckel.",
+            file=sys.stderr,
+            flush=True,
+        )
         sys.exit(2)
     print(json.dumps(data, indent=2, ensure_ascii=False), flush=True)
     cmd = data.get("command") if isinstance(data, dict) else None
