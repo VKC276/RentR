@@ -569,7 +569,7 @@
       num: '1',
       title: 'Godkänn',
       state: approveState,
-      open: needsApproval,
+      open: false,
       lead: needsApproval
         ? 'Godkänn eller avslå förfrågan innan betalning och utlämning.'
         : '',
@@ -637,7 +637,7 @@
     if (canEditPads) {
       html += accordion({
         title: 'Ändra period & utrustning',
-        open: !!b.doubleBooked,
+        open: false,
         lead: 'Ändra datum och utrustning tillsammans — då går det att lösa krockar i ett steg. Priset räknas om automatiskt.',
         body:
           '<div class="row">' +
