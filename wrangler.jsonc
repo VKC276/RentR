@@ -1,0 +1,15 @@
+{
+  "name": "rentr-api",
+  "main": "worker/src/index.js",
+  "compatibility_date": "2026-08-01",
+  "account_id": "3e979ddd9a61da24577bef87510fde29",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rentr",
+      "database_id": "fa835844-34a7-4540-b766-f527622a6bda",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

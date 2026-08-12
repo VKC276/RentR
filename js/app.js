@@ -431,6 +431,43 @@
       '</div>' + priceRows(price);
   }
 
+  function joinNames(names) {
+    if (names.length < 2) return names.join('');
+    return names.slice(0, -1).join(', ') + ' ' + I18n.t('listAnd') + ' ' + names[names.length - 1];
+  }
+
+  function reloadCalendarFresh() {
+    forgetStoredMonths();
+    state.blocked = {};
+    state.loadedMonths = {};
+    state.fetchedMonths = {};
+    return Promise.all([
+      loadMonth(state.month),
+      ensureMonths(state.startDate, state.endDate)
+    ]);
+  }
+
+  function showConflict(pads) {
+    var keep = state.selected.slice();
+    var box = $('conflictAlert');
+    var names = joinNames(pads.map(function (p) { return p.name || p.id; }));
+    $('conflictTitle').textContent = I18n.t('conflictTitle');
+    $('conflictText').textContent = I18n.t(pads.length === 1 ? 'conflictOne' : 'conflictMany', { pads: names });
+    $('conflictHint').textContent = I18n.t('conflictHint');
+    box.hidden = false;
+    $('stepForm').hidden = true;
+    scrollToEl(box);
+    box.focus({ preventScroll: true });
+
+    Status.during(I18n.t('busyCalendar'), reloadCalendarFresh()).then(function () {
+      renderCalendar();
+      renderPads(padsForRange(state.startDate, state.endDate), keep);
+      updatePriceBox();
+    }).catch(function (err) {
+      showErr('errPads', err.message || I18n.t('error'));
+    });
+  }
+
   $('calendar').addEventListener('click', function (ev) {
     var cell = ev.target.closest('.cal-day');
     if (!cell || cell.classList.contains('blank') || cell.classList.contains('past')) return;
@@ -499,6 +536,7 @@
     }
     Status.button($('btnSubmit'), I18n.t('busySubmit'), Api.call('submitBooking', payload)).then(function (res) {
       forgetStoredMonths();
+      $('conflictAlert').hidden = true;
       $('stepDates').hidden = true;
       $('stepPads').hidden = true;
       $('stepForm').hidden = true;
@@ -508,6 +546,11 @@
       $('manageLink').href = res.manageUrl || ('booking.html?t=' + encodeURIComponent(res.magicToken));
       $('manageLink').textContent = I18n.t('manage');
     }).catch(function (err) {
+      var taken = err && err.code === 'padsUnavailable' && err.details && err.details.unavailablePads;
+      if (taken && taken.length) {
+        showConflict(taken);
+        return;
+      }
       if (err && err.code === 'systemBusy') {
         showErr('errForm', I18n.t('tryAgainSoon'));
         return;

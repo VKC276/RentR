@@ -63,6 +63,14 @@
 
     <div class="panel" id="stepPads" hidden>
       <h2 id="titlePads">Pads</h2>
+      <div class="alert" id="conflictAlert" role="alert" tabindex="-1" hidden>
+        <span class="alert-icon" aria-hidden="true">!</span>
+        <span class="alert-body">
+          <strong class="alert-title" id="conflictTitle"></strong>
+          <span class="alert-text" id="conflictText"></span>
+          <span class="alert-text alert-hint" id="conflictHint"></span>
+        </span>
+      </div>
       <div class="pad-grid" id="padGrid"></div>
       <p style="margin-top:1rem;">
         <button type="button" id="btnContinue" disabled>Continue</button>
