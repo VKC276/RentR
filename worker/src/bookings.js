@@ -759,6 +759,8 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       .prepare(`UPDATE bookings SET notes = ?, updated_at = ? WHERE id = ?`)
       .bind(String(payload.notes || ''), now, bookingId)
       .run();
+  } else if (action === 'resendMail') {
+    // No booking mutation — mail is sent below after enrich.
   } else {
     throw softError('Okänd action', 400);
   }
@@ -772,6 +774,15 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
   if (action === 'approve' || action === 'reject' || action === 'handOut' || action === 'return') {
     const magic = await createMagicToken(db, bookingId);
     kick(ctx, mailGuestStatus(env, booking, magic));
+  } else if (action === 'resendMail') {
+    const magic = await createMagicToken(db, bookingId);
+    if (booking.status === 'Cancelled') {
+      kick(ctx, mailGuestCancelled(env, booking, magic));
+    } else if (booking.status === 'Requested') {
+      kick(ctx, mailBookingCreated(env, booking, magic));
+    } else {
+      kick(ctx, mailGuestStatus(env, booking, magic));
+    }
   }
   return { booking };
 }

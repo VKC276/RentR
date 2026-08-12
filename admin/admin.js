@@ -488,6 +488,12 @@
       html += '<div id="editPadsBox" hidden></div>';
     }
 
+    html += '<section class="detail-section">';
+    html += '<h3>Mejl</h3>';
+    html += '<p class="detail-section-lead muted">Skicka bokningsmejlet till gästen igen (samma språk som bokningen).</p>';
+    html += '<div class="actions"><button type="button" class="ghost" id="actResendMail">Skicka mejl igen</button></div>';
+    html += '</section>';
+
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
 
@@ -566,6 +572,7 @@
     onAct('actReject', 'reject');
     onAct('actReturn', 'return');
     onAct('actPaid', 'setPaid', { paid: !b.paid });
+    onAct('actResendMail', 'resendMail');
     autoSaveFlag('flagPickup', 'allowSelfPickup');
     autoSaveFlag('flagReturn', 'allowSelfReturn');
 

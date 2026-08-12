@@ -214,18 +214,63 @@ function bookingRows(locale, v, { withStatus = false, withTotal = true } = {}) {
   return rows;
 }
 
+/**
+ * Apps Script web apps often 302 to googleusercontent and drop the POST body
+ * if the client follows redirects automatically. Re-POST manually instead.
+ */
+async function postMailWebhook(url, payload) {
+  const body = JSON.stringify(payload);
+  const headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+  let res = await fetch(url, { method: 'POST', headers, body, redirect: 'manual' });
+
+  if (res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get('Location');
+    if (!loc) {
+      throw new Error('Mail-webhook redirect utan Location (' + res.status + ')');
+    }
+    res = await fetch(loc, { method: 'POST', headers, body, redirect: 'follow' });
+  }
+
+  const text = await res.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch (_) {
+    parsed = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      'Mail-webhook HTTP ' + res.status + (text ? ': ' + text.slice(0, 200) : '')
+    );
+  }
+  if (parsed && parsed.error) {
+    throw new Error('Mail-webhook: ' + parsed.error);
+  }
+  if (parsed && Array.isArray(parsed.errors) && parsed.errors.length) {
+    throw new Error('Mail-webhook send errors: ' + parsed.errors.join('; '));
+  }
+  return parsed;
+}
+
 export async function sendMessages(env, messages) {
   const url = env.MAIL_WEBHOOK_URL;
-  if (!url || !messages || !messages.length) return;
-  await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
+  if (!url) {
+    console.error('MAIL_WEBHOOK_URL saknas — inga mejl skickas');
+    return;
+  }
+  if (!messages || !messages.length) return;
+
+  try {
+    await postMailWebhook(url, {
       action: 'relayMail',
       secret: env.MAIL_WEBHOOK_SECRET || '',
       messages,
-    }),
-  });
+    });
+  } catch (err) {
+    console.error('Kunde inte skicka mejl', String(err && err.message ? err.message : err));
+    throw err;
+  }
 }
 
 async function adminEmails(db) {

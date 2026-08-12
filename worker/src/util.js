@@ -140,6 +140,8 @@ export function statusLabel(status, locale) {
 
 /** Fire-and-forget mail / background work; prefer waitUntil when available. */
 export function kick(ctx, promise) {
-  const p = Promise.resolve(promise).catch(() => {});
+  const p = Promise.resolve(promise).catch((err) => {
+    console.error('Bakgrundsjobb misslyckades', String(err && err.message ? err.message : err));
+  });
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
 }
