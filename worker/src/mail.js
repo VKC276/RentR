@@ -41,7 +41,7 @@ const MAIL_I18N = {
     daysNote: 'Start- och slutdatum räknas som hela dygn.',
     payNote: 'Betalning sker enligt överenskommelse / på plats.',
     greeting: 'Hej {{name}},',
-    signoff: 'Vänliga hälsningar\nRentR',
+    signoff: 'Vänliga hälsningar\nVästerviks klätterklubb',
   },
   en: {
     createdSubject: 'Booking request {{bookingNumber}} received',
@@ -74,7 +74,7 @@ const MAIL_I18N = {
     daysNote: 'Start and end dates each count as a full day.',
     payNote: 'Payment is arranged separately / on site.',
     greeting: 'Hi {{name}},',
-    signoff: 'Best regards\nRentR',
+    signoff: 'Best regards\nVästerviks klätterklubb',
   },
   de: {
     createdSubject: 'Buchungsanfrage {{bookingNumber}} erhalten',
@@ -107,7 +107,7 @@ const MAIL_I18N = {
     daysNote: 'Start- und Enddatum zählen als volle Tage.',
     payNote: 'Zahlung erfolgt nach Absprache / vor Ort.',
     greeting: 'Hallo {{name}},',
-    signoff: 'Freundliche Grüße\nRentR',
+    signoff: 'Freundliche Grüße\nVästerviks klätterklubb',
   },
 };
 
