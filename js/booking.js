@@ -17,10 +17,24 @@
   var CANCELLABLE = ['Requested', 'Approved', 'ChangePending', 'CancelPending'];
 
   function doorStateLabel(od) {
-    if (od.doorState === 'active') return I18n.t('doorStateActive');
-    if (od.doorState === 'upcoming') return I18n.t('doorStateUpcoming', { date: od.activeDate || '' });
+    var date = od.activeDate || '';
+    if (od.doorState === 'active') {
+      return od.mode === 'return'
+        ? I18n.t('doorStateReturnActive')
+        : I18n.t('doorStatePickupActive');
+    }
+    if (od.doorState === 'upcoming') {
+      return od.mode === 'return'
+        ? I18n.t('doorStateReturnUpcoming', { date: date })
+        : I18n.t('doorStatePickupUpcoming', { date: date });
+    }
+    if (od.doorState === 'pickupPassed') return I18n.t('doorStatePickupPassed');
+    if (od.doorState === 'returnPassed') return I18n.t('doorStateReturnPassed');
+    if (od.doorState === 'pickedUp') return I18n.t('doorStatePickedUp');
+    if (od.doorState === 'done' || od.doorState === 'returned') return I18n.t('doorStateReturned');
     if (od.doorState === 'passed') return I18n.t('doorStatePassed');
     if (od.doorState === 'revoked') return I18n.t('doorStateRevoked');
+    if (od.doorState === 'unavailable') return I18n.t('doorStateUnavailable');
     return '';
   }
 
@@ -28,15 +42,32 @@
     if (!od.showConfirmPickup && !od.showConfirmReturn && !od.doorUi) return '';
 
     var mode = od.mode || (od.showConfirmPickup ? 'pickup' : (od.showConfirmReturn ? 'return' : ''));
+    var state = od.doorState || '';
     var lead = '';
-    if (mode === 'pickup' || od.showConfirmPickup) lead = I18n.t('selfServicePickupExplain');
-    else if (mode === 'return' || od.showConfirmReturn) lead = I18n.t('selfServiceReturnExplain');
-    else lead = I18n.t('openDoorHint');
+    if (od.showConfirmPickup || (mode === 'pickup' && state !== 'pickedUp' && state !== 'pickupPassed')) {
+      lead = I18n.t('selfServicePickupExplain');
+    } else if (od.showConfirmReturn || mode === 'return') {
+      lead = I18n.t('selfServiceReturnExplain');
+    } else if (state === 'pickedUp') {
+      lead = '';
+    } else {
+      lead = I18n.t('openDoorHint');
+    }
 
     var html = '<section class="booking-chapter self-service">';
     html += '<h2>' + escapeHtml(I18n.t('selfServiceTitle')) + '</h2>';
-    html += '<p class="muted chapter-lead">' + escapeHtml(lead) + '</p>';
+    if (lead) html += '<p class="muted chapter-lead">' + escapeHtml(lead) + '</p>';
 
+    if (od.showOpenDoor || state === 'upcoming' || state === 'active') {
+      var enabled = !!od.showOpenDoor;
+      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepOpen')) + '</p>';
+      html += '<div class="door-row">';
+      html += '<button type="button" id="btnDoor"' + (enabled ? '' : ' disabled') + '>' +
+        I18n.t('openDoor') + '</button>';
+      html += '<span class="door-state' + (enabled ? ' is-active' : '') + '">' +
+        escapeHtml(doorStateLabel(od)) + '</span>';
+      html += '</div>';
+    }
     if (od.showConfirmPickup) {
       html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepConfirmPickup')) + '</p>';
       html += '<div class="door-row">';
@@ -47,15 +78,8 @@
       html += '<div class="door-row">';
       html += '<button type="button" class="warn" id="btnConfirmReturn">' + I18n.t('confirmReturn') + '</button>';
       html += '</div>';
-    } else {
-      var enabled = !!od.showOpenDoor;
-      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepOpen')) + '</p>';
-      html += '<div class="door-row">';
-      html += '<button type="button" id="btnDoor"' + (enabled ? '' : ' disabled') + '>' +
-        I18n.t('openDoor') + '</button>';
-      html += '<span class="door-state' + (enabled ? ' is-active' : '') + '">' +
-        escapeHtml(doorStateLabel(od)) + '</span>';
-      html += '</div>';
+    } else if (!od.showOpenDoor && state !== 'upcoming' && state !== 'active') {
+      html += '<p class="door-state">' + escapeHtml(doorStateLabel(od)) + '</p>';
     }
 
     html += '</section>';

@@ -127,34 +127,17 @@ export function computeOpenDoorFlags(b) {
   }
   if (!doorUi) return base;
 
-  if (returnActive && doorOpenedReturn) {
-    return {
-      ...base,
-      doorUi: true,
-      showConfirmReturn: true,
-      mode: 'return',
-      doorState: 'confirmReturn',
-      activeDate: endDate,
-    };
-  }
+  // On the active day the door stays openable until the guest confirms —
+  // door_opened_* only unlocks the confirm step, it does not revoke Open door.
   if (returnActive) {
     return {
       ...base,
       doorUi: true,
       showOpenDoor: true,
+      showConfirmReturn: doorOpenedReturn,
       mode: 'return',
       doorState: 'active',
       activeDate: endDate,
-    };
-  }
-  if (pickupActive && doorOpenedPickup) {
-    return {
-      ...base,
-      doorUi: true,
-      showConfirmPickup: true,
-      mode: 'pickup',
-      doorState: 'confirmPickup',
-      activeDate: startDate,
     };
   }
   if (pickupActive) {
@@ -162,6 +145,7 @@ export function computeOpenDoorFlags(b) {
       ...base,
       doorUi: true,
       showOpenDoor: true,
+      showConfirmPickup: doorOpenedPickup,
       mode: 'pickup',
       doorState: 'active',
       activeDate: startDate,
@@ -186,10 +170,24 @@ export function computeOpenDoorFlags(b) {
       activeDate: candidates[0].date,
     };
   }
+
+  // Nothing openable today — explain why, by mode/status.
+  if (status === 'HandedOut') {
+    if (allowReturn && endDate && endDate < today) {
+      return { ...base, doorUi: true, mode: 'return', doorState: 'returnPassed', activeDate: endDate };
+    }
+    return { ...base, doorUi: true, mode: 'pickup', doorState: 'pickedUp', activeDate: startDate };
+  }
+  if (allowPickup && status === 'Approved' && startDate && startDate < today) {
+    return { ...base, doorUi: true, mode: 'pickup', doorState: 'pickupPassed', activeDate: startDate };
+  }
+  if (allowReturn && endDate && endDate < today) {
+    return { ...base, doorUi: true, mode: 'return', doorState: 'returnPassed', activeDate: endDate };
+  }
   return {
     ...base,
     doorUi: true,
-    doorState: 'passed',
+    doorState: 'unavailable',
   };
 }
 
