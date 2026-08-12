@@ -8,6 +8,7 @@
   function applyI18n() {
     I18n.renderLangSwitcher($('lang'));
     $('brand').textContent = I18n.t('appName');
+    document.title = I18n.t('appName') + ' — ' + I18n.t('doorPassTitle');
     $('loading').textContent = I18n.t('loading');
     if (pass) render();
   }
@@ -34,12 +35,12 @@
     html += '<h1>' + escapeHtml(pass.recipientName) + '</h1>';
     html += '<p class="muted">' + I18n.t('doorValid') + ': <strong>' +
       escapeHtml(pass.startDate) + ' – ' + escapeHtml(pass.endDate) + '</strong></p>';
-    html += '<p class="muted">' + I18n.t('doorValidHint') + '</p>';
+    html += '<p class="muted">' + I18n.t('doorPassValidHint') + '</p>';
 
     if (pass.doorUi || pass.showOpenDoor || pass.doorState) {
       var enabled = !!pass.showOpenDoor;
       html += '<div class="door-block">';
-      html += '<p class="muted door-hint">' + escapeHtml(I18n.t('openDoorHint')) + '</p>';
+      html += '<p class="muted door-hint">' + escapeHtml(I18n.t('openDoorPassHint')) + '</p>';
       html += '<div class="door-row">';
       html += '<button type="button" id="btnDoor" style="font-size:1.15rem;padding:1rem 1.5rem;"' +
         (enabled ? '' : ' disabled') + '>' + I18n.t('openDoor') + '</button>';
@@ -47,7 +48,7 @@
         escapeHtml(doorStateLabel(pass)) + '</span>';
       html += '</div></div>';
     } else {
-      html += '<p class="err">' + I18n.t('doorNotValidToday') + '</p>';
+      html += '<p class="err">' + I18n.t('doorPassNotValidToday') + '</p>';
     }
 
     $('content').innerHTML = html;
@@ -79,7 +80,7 @@
     return;
   }
 
-  Status.during(I18n.t('busyBooking'), Api.call('getDoorPass', { magicToken: token, t: token })).then(function (res) {
+  Status.during(I18n.t('busyDoorPass'), Api.call('getDoorPass', { magicToken: token, t: token })).then(function (res) {
     pass = res.pass;
     render();
   }).catch(function (e) {
