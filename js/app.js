@@ -593,6 +593,13 @@
         showErr('errForm', I18n.t('tryAgainSoon'));
         return;
       }
+      // We ran out of attempts while the server was still working, so the
+      // booking may exist. Telling the guest to press again would risk a
+      // duplicate; the confirmation mail is the reliable answer.
+      if (err && (err.timedOut || err.code === 'stillWorking')) {
+        showErr('errForm', I18n.t('slowSubmit'));
+        return;
+      }
       showErr('errForm', err.message || I18n.t('error'));
     });
   });

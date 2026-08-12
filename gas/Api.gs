@@ -35,24 +35,77 @@ function handleApi_(e) {
  *
  * Only successful results are stored; a thrown error re-runs on retry.
  */
+var IDEM_TTL_SEC = 900;
+var IDEM_RUNNING = 'running';
+/** How long a duplicate waits for the original to publish before giving up. */
+var IDEM_WAIT_MS = 20000;
+
+function idemKey_(requestId) {
+  return 'idem_' + String(requestId).slice(0, 64);
+}
+
+/**
+ * Publishes a result for its requestId before the caller has finished.
+ *
+ * A slow tail such as sending mail must not keep a waiting retry blocked: once
+ * the rows exist the answer is final, so it is safe to hand out.
+ */
+function publishIdempotentResult_(requestId, value) {
+  if (!requestId) return;
+  try {
+    CacheService.getScriptCache().put(idemKey_(requestId), JSON.stringify(value), IDEM_TTL_SEC);
+  } catch (err) {
+    // Too large to cache. A retry re-runs, which the availability check catches.
+  }
+}
+
 function routeIdempotent_(action, body, sessionToken, e) {
   var key = body && body.requestId ? String(body.requestId).slice(0, 64) : '';
   if (!key) return route_(action, body, sessionToken, e);
 
   var cache = CacheService.getScriptCache();
-  var cacheKey = 'idem_' + key;
+  var cacheKey = idemKey_(key);
   var hit = cache.get(cacheKey);
-  if (hit) {
-    try { return JSON.parse(hit); } catch (err) { /* fall through and re-run */ }
+
+  // The marker is claimed before the work starts. Without it a client that gave
+  // up waiting and re-sent would run the whole action a second time, and for a
+  // booking the second run would find the pads its own first run just took.
+  if (!hit) {
+    try { cache.put(cacheKey, IDEM_RUNNING, IDEM_TTL_SEC); } catch (err) { /* best effort */ }
+  } else {
+    var waited = waitForIdempotentResult_(cache, cacheKey, hit);
+    if (waited) return waited;
+    throw softError_(
+      'Din förfrågan behandlas fortfarande. Vänta en stund.', 503, 'stillWorking'
+    );
   }
 
-  var result = route_(action, body, sessionToken, e);
+  var result;
   try {
-    cache.put(cacheKey, JSON.stringify(result), 600);
+    result = route_(action, body, sessionToken, e);
   } catch (err) {
-    // Result too large to cache; a retry would re-run, which is acceptable.
+    // Let the next attempt run for real rather than wait for a result that is
+    // never coming.
+    try { cache.remove(cacheKey); } catch (e2) { /* best effort */ }
+    throw err;
   }
+  publishIdempotentResult_(key, result);
   return result;
+}
+
+/** Returns the stored result, or null if it never arrived in time. */
+function waitForIdempotentResult_(cache, cacheKey, hit) {
+  var deadline = Date.now() + IDEM_WAIT_MS;
+  while (true) {
+    if (hit && hit !== IDEM_RUNNING) {
+      try { return JSON.parse(hit); } catch (err) { return null; }
+    }
+    if (Date.now() >= deadline) return null;
+    Utilities.sleep(1000);
+    hit = cache.get(cacheKey);
+    // The original failed and cleared its marker; nothing left to wait for.
+    if (!hit) return null;
+  }
 }
 
 function route_(action, body, sessionToken, e) {

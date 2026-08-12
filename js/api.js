@@ -46,6 +46,9 @@
       // switches on code and reads whatever the sentence needs from details.
       if (data.code) err.code = data.code;
       if (data.details) err.details = data.details;
+      // The original request is still executing. Asking again is the whole
+      // point, not a failure to report.
+      if (data.code === 'stillWorking') err.retryable = true;
       throw err;
     }
     return data;
@@ -60,7 +63,15 @@
       signal: ctrl ? ctrl.signal : undefined,
       done: function () { clearTimeout(timer); },
       wrap: function (e) {
-        if (e && e.name === 'AbortError') return new Error('API timeout (' + action + ')');
+        if (e && e.name === 'AbortError') {
+          // Apps Script keeps running after the browser stops listening, so the
+          // action may well have succeeded. The requestId lets us ask again for
+          // the answer instead of treating this as a broken transport.
+          var err = new Error('API timeout (' + action + ')');
+          err.retryable = true;
+          err.timedOut = true;
+          return err;
+        }
         return e;
       }
     };
@@ -149,7 +160,7 @@
 
   var SENDERS = { post: sendPost, get: sendGet, jsonp: sendJsonp };
 
-  var RETRIES = 4;
+  var RETRIES = 6;
 
   function newRequestId() {
     return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
@@ -171,7 +182,10 @@
       if (typeof api.onRetry === 'function') {
         try { api.onRetry(body.action, RETRIES - left + 1); } catch (hookErr) { /* ignore */ }
       }
-      return delay(700).then(function () {
+      // Waiting out a slow run needs a longer pause than re-fetching after
+      // Google served one of its error pages.
+      var pause = e.timedOut || e.code === 'stillWorking' ? 2000 : 700;
+      return delay(pause).then(function () {
         return sendRetrying(name, body, left - 1);
       });
     });
@@ -195,6 +209,13 @@
     }).catch(function (e) {
       // A rejection from our own backend means the transport works fine.
       if (e && e.fromServer) {
+        transport = name;
+        throw e;
+      }
+      // A timeout says the request was slow, not that this way of sending it is
+      // blocked. Retrying it as GET and then JSONP only adds two more waits and
+      // leaves the guest staring at a spinner.
+      if (e && e.timedOut) {
         transport = name;
         throw e;
       }

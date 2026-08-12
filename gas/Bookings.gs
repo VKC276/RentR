@@ -224,18 +224,25 @@ function submitBooking_(payload) {
   var magic = createMagicToken_(created.id);
   logEvent_(created.id, 'created', email, { bookingNumber: created.bookingNumber });
   var booking = enrichBooking_(findById_(SHEET_NAMES.Bookings, created.id));
+  var out = {
+    booking: booking,
+    bookingNumber: created.bookingNumber,
+    magicToken: magic,
+    manageUrl: manageUrl_(magic)
+  };
+
+  // The booking is complete as far as the guest is concerned. Two mails take
+  // seconds that the browser may not wait for, so the answer is handed out
+  // before them: a client that already timed out and re-sent gets it now
+  // instead of after the mail server.
+  publishIdempotentResult_(payload.requestId, out);
   try {
     mailBookingCreated_(booking, magic);
     mailAdminNewRequest_(booking);
   } catch (e) {
     // mail failure should not roll back booking
   }
-  return {
-    booking: booking,
-    bookingNumber: created.bookingNumber,
-    magicToken: magic,
-    manageUrl: manageUrl_(magic)
-  };
+  return out;
 }
 
 function manageUrl_(token) {
