@@ -112,6 +112,17 @@
 
       <div class="panel" id="usersSection">
         <h2>Användare</h2>
+        <h3>Mitt konto</h3>
+        <p class="muted">Byt lösenord för ditt inloggade konto. Du förblir inloggad efter bytet.</p>
+        <div class="row">
+          <div><label>Nuvarande lösenord</label><input id="pwCurrent" type="password" autocomplete="current-password" /></div>
+          <div><label>Nytt lösenord</label><input id="pwNew" type="password" autocomplete="new-password" /></div>
+          <div><label>Bekräfta nytt lösenord</label><input id="pwConfirm" type="password" autocomplete="new-password" /></div>
+        </div>
+        <p><button type="button" id="btnChangePassword">Byt lösenord</button></p>
+        <p class="ok" id="pwOk" hidden></p>
+        <p class="err" id="pwErr" hidden></p>
+        <h3>Alla administratörer</h3>
         <div id="usersList"></div>
         <h3>Ny admin</h3>
         <div class="row">

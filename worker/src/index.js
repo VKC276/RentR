@@ -127,6 +127,13 @@ async function route(env, action, body, ctx) {
       return logout(env, sessionToken || body.sessionToken);
     case 'me':
       return me(env, sessionToken);
+    case 'changePassword':
+      return changePassword(
+        env,
+        sessionToken,
+        body.currentPassword,
+        body.newPassword
+      );
     case 'listBookings':
       await requireAdmin(env, sessionToken);
       return { bookings: await listBookingsAdmin(env.DB, body) };

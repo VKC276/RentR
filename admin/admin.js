@@ -63,6 +63,7 @@
     listUsers: 'Hämtar användare…',
     createUser: 'Skapar användare…',
     deleteUser: 'Tar bort användare…',
+    changePassword: 'Byter lösenord…',
     listDoorPasses: 'Hämtar dörrlänkar…',
     createDoorPass: 'Skickar dörrlänk…',
     revokeDoorPass: 'Spärrar dörrlänk…'
@@ -833,6 +834,40 @@
     }).catch(function (e) {
       $('userErr').hidden = false;
       $('userErr').textContent = e.message;
+    });
+  };
+
+  $('btnChangePassword').onclick = function () {
+    $('pwOk').hidden = true;
+    $('pwErr').hidden = true;
+    var current = $('pwCurrent').value;
+    var next = $('pwNew').value;
+    var confirm = $('pwConfirm').value;
+    if (!current || !next) {
+      $('pwErr').hidden = false;
+      $('pwErr').textContent = 'Fyll i nuvarande och nytt lösenord.';
+      return;
+    }
+    if (next.length < 8) {
+      $('pwErr').hidden = false;
+      $('pwErr').textContent = 'Nytt lösenord måste vara minst 8 tecken.';
+      return;
+    }
+    if (next !== confirm) {
+      $('pwErr').hidden = false;
+      $('pwErr').textContent = 'Bekräftelsen matchar inte det nya lösenordet.';
+      return;
+    }
+    api('changePassword', {
+      currentPassword: current,
+      newPassword: next
+    }, $('btnChangePassword')).then(function () {
+      $('pwCurrent').value = $('pwNew').value = $('pwConfirm').value = '';
+      $('pwOk').hidden = false;
+      $('pwOk').textContent = 'Lösenordet är uppdaterat.';
+    }).catch(function (e) {
+      $('pwErr').hidden = false;
+      $('pwErr').textContent = e.message;
     });
   };
 

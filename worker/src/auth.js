@@ -76,6 +76,17 @@ export async function revokeSessionsForUser(env, userId) {
   await env.DB.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run();
 }
 
+export async function revokeSessionsForUserExcept(env, userId, keepToken) {
+  if (!keepToken) {
+    await revokeSessionsForUser(env, userId);
+    return;
+  }
+  await env.DB
+    .prepare(`DELETE FROM sessions WHERE user_id = ? AND token != ?`)
+    .bind(userId, keepToken)
+    .run();
+}
+
 function sessionExpired(expiresAt) {
   if (!expiresAt || String(expiresAt).indexOf('9999') === 0) return false;
   const t = new Date(expiresAt).getTime();
@@ -141,6 +152,34 @@ export async function me(env, token) {
 
 export async function logout(env, token) {
   await revokeSession(env, token);
+  return { ok: true };
+}
+
+export async function changePassword(env, token, currentPassword, newPassword) {
+  const user = await requireAdmin(env, token);
+  const row = await env.DB
+    .prepare(`SELECT password_hash, salt FROM users WHERE id = ?`)
+    .bind(user.id)
+    .first();
+  if (!row) throw softError('Användare saknas', 404);
+
+  if (!(await verifyPassword(env, currentPassword, row.salt, row.password_hash))) {
+    throw softError('Nuvarande lösenord stämmer inte', 401);
+  }
+
+  const next = String(newPassword || '');
+  if (next.length < 8) {
+    throw softError('Nytt lösenord måste vara minst 8 tecken', 400);
+  }
+
+  const salt = randomHex(16);
+  const passwordHash = await hashPassword(env, next, salt);
+  await env.DB
+    .prepare(`UPDATE users SET password_hash = ?, salt = ?, updated_at = ? WHERE id = ?`)
+    .bind(passwordHash, salt, nowIso(), user.id)
+    .run();
+
+  await revokeSessionsForUserExcept(env, user.id, token);
   return { ok: true };
 }
 
