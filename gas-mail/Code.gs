@@ -1,20 +1,18 @@
 /**
  * Thin Gmail relay for RentR on Cloudflare.
  *
- * The Worker owns all data and templates. This script only sends mail through
- * the club's Google account. Deploy as a web app (Anyone) and set the same
- * MAIL_WEBHOOK_SECRET on both sides.
- *
- * Body: { action: 'relayMail', secret, messages: [{ to, subject, body }] }
+ * Body: {
+ *   action: 'relayMail',
+ *   secret,
+ *   messages: [{ to, subject, body, html? }]
+ * }
  */
-
-var APP_NAME = 'RentR';
 
 function doPost(e) {
   return handleRelay_(e);
 }
 
-function doGet(e) {
+function doGet() {
   return jsonOut_({ ok: true, service: 'rentr-mail', time: new Date().toISOString() });
 }
 
@@ -48,8 +46,13 @@ function handleRelay_(e) {
         var to = String(m.to || '').trim();
         var subject = String(m.subject || '');
         var text = String(m.body || '');
+        var html = m.html ? String(m.html) : '';
         if (!to || !subject) return;
-        GmailApp.sendEmail(to, subject, text);
+        if (html) {
+          GmailApp.sendEmail(to, subject, text, { htmlBody: html, name: 'RentR' });
+        } else {
+          GmailApp.sendEmail(to, subject, text, { name: 'RentR' });
+        }
         sent++;
       } catch (err) {
         errors.push(String(err && err.message ? err.message : err));
@@ -70,12 +73,8 @@ function jsonOut_(obj, status) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * Run once in the editor after deploy: sets MAIL_WEBHOOK_SECRET.
- * Pass the same value to `wrangler secret put MAIL_WEBHOOK_SECRET`.
- */
 function setMailWebhookSecret() {
   var secret = 'REPLACE_WITH_A_LONG_RANDOM_STRING';
   PropertiesService.getScriptProperties().setProperty('MAIL_WEBHOOK_SECRET', secret);
-  Logger.log('MAIL_WEBHOOK_SECRET sparad. Sätt samma värde som Worker-secret.');
+  Logger.log('MAIL_WEBHOOK_SECRET sparad.');
 }

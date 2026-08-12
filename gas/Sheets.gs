@@ -205,7 +205,7 @@ function seedIfEmpty_() {
   if (!config.relayPulseMs) setConfig_('relayPulseMs', '1000');
   if (!config.appName) setConfig_('appName', APP_NAME);
   if (!config.timezone) setConfig_('timezone', 'Europe/Stockholm');
-  if (!config.pagesBaseUrl) setConfig_('pagesBaseUrl', 'http://ledinfo.vastervikclimbing.se/RentR');
+  if (!config.pagesBaseUrl) setConfig_('pagesBaseUrl', 'https://rent.vastervikclimbing.se');
   if (!config.sessionHours && config.sessionHours !== '0') setConfig_('sessionHours', '0');
   if (!config.magicLinkDays) setConfig_('magicLinkDays', '90');
 

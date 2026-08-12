@@ -1,6 +1,6 @@
 /**
- * Mail templates (ported from gas/Mail.gs) + fire-and-forget GAS webhook relay.
- * Worker builds fully rendered { to, subject, body } messages; GAS only sends.
+ * Mail templates + fire-and-forget GAS webhook.
+ * Messages include both plain text and simple HTML so Gmail renders cleanly.
  */
 
 import { statusLabel } from './util.js';
@@ -11,68 +11,98 @@ const APP_NAME = 'RentR';
 const MAIL_I18N = {
   sv: {
     createdSubject: 'Bokningsförfrågan {{bookingNumber}} mottagen',
-    createdBody:
-      'Hej {{name}},\n\nDin förfrågan {{bookingNumber}} är mottagen.\nPeriod: {{start}} – {{end}} ({{days}} dygn; start- och slutdatum räknas som hela dygn).\nUtrustning: {{pads}}\nTotalt: {{total}} {{currency}}\n\nBetalning sker enligt överenskommelse / på plats.\nHantera bokning: {{url}}\n\nVänliga hälsningar\nRentR',
+    createdIntro: 'Din förfrågan är mottagen och väntar på godkännande.',
     statusSubject: 'Bokning {{bookingNumber}}: {{status}}',
-    statusBody:
-      'Hej {{name}},\n\nStatus för bokning {{bookingNumber}} är nu: {{status}}.\nPeriod: {{start}} – {{end}} ({{days}} dygn).\nTotalt: {{total}} {{currency}}\n\nHantera: {{url}}\n\nVänliga hälsningar\nRentR',
+    statusIntro: 'Status för din bokning har uppdaterats.',
     cancelledSubject: 'Bokning {{bookingNumber}} är avbokad',
-    cancelledBody:
-      'Hej {{name}},\n\nDin bokning {{bookingNumber}} är avbokad och datumen är åter lediga.\nPeriod: {{start}} – {{end}}\nUtrustning: {{pads}}\n\nInget mer behövs från dig. Välkommen tillbaka!\n\nVänliga hälsningar\nRentR',
-    adminNew: 'Ny bokningsförfrågan {{bookingNumber}} från {{name}} ({{email}}).',
-    adminChange: 'Ändringsförfrågan för {{bookingNumber}}.',
-    adminCancelled: 'Bokning {{bookingNumber}} avbokad av gästen.',
-    adminCancelledBody:
-      '{{name}} ({{email}}) har avbokat bokning {{bookingNumber}}.\nPeriod: {{start}} – {{end}}\nUtrustning: {{pads}}\n\nDatumen är åter bokningsbara. Ingen åtgärd behövs.\nBokning: {{url}}\n',
+    cancelledIntro: 'Din bokning är avbokad och datumen är åter lediga. Inget mer behövs från dig.',
+    adminNewSubject: 'Ny förfrågan {{bookingNumber}}',
+    adminNewIntro: 'En ny bokningsförfrågan har kommit in.',
+    adminChangeSubject: 'Ändring begärd {{bookingNumber}}',
+    adminChangeIntro: 'Gästen har begärt en ändring av bokningen.',
+    adminCancelledSubject: 'Avbokad {{bookingNumber}}',
+    adminCancelledIntro: 'Gästen har avbokat. Datumen är åter bokningsbara — ingen åtgärd behövs.',
     doorPassSubject: 'Dörrlänk {{start}} – {{end}}',
-    doorPassBody:
-      'Hej {{name}},\n\nHär är din länk för att öppna dörren.\nGiltig: {{start}} – {{end}} (inklusive båda dagarna).\n\nÖppna: {{url}}\n\nSidan visar endast Open door under giltighetstiden.\n',
+    doorPassIntro: 'Här är din länk för att öppna förrådet. Open door fungerar endast under giltighetstiden.',
+    labelPeriod: 'Period',
+    labelDays: 'Dygn',
+    labelPads: 'Utrustning',
+    labelTotal: 'Summa',
+    labelStatus: 'Status',
+    labelGuest: 'Gäst',
+    labelManage: 'Hantera bokning',
+    labelOpen: 'Öppna dörr',
+    labelValid: 'Giltig',
+    daysNote: 'Start- och slutdatum räknas som hela dygn.',
+    payNote: 'Betalning sker enligt överenskommelse / på plats.',
+    greeting: 'Hej {{name}},',
+    signoff: 'Vänliga hälsningar\nRentR',
   },
   en: {
     createdSubject: 'Booking request {{bookingNumber}} received',
-    createdBody:
-      'Hi {{name}},\n\nYour request {{bookingNumber}} was received.\nPeriod: {{start}} – {{end}} ({{days}} days; start and end dates each count as a full day).\nEquipment: {{pads}}\nTotal: {{total}} {{currency}}\n\nPayment is arranged separately / on site.\nManage booking: {{url}}\n\nBest regards\nRentR',
+    createdIntro: 'Your request was received and is waiting for approval.',
     statusSubject: 'Booking {{bookingNumber}}: {{status}}',
-    statusBody:
-      'Hi {{name}},\n\nStatus for booking {{bookingNumber}} is now: {{status}}.\nPeriod: {{start}} – {{end}} ({{days}} days).\nTotal: {{total}} {{currency}}\n\nManage: {{url}}\n\nBest regards\nRentR',
+    statusIntro: 'The status of your booking has been updated.',
     cancelledSubject: 'Booking {{bookingNumber}} is cancelled',
-    cancelledBody:
-      'Hi {{name}},\n\nYour booking {{bookingNumber}} is cancelled and the dates are free again.\nPeriod: {{start}} – {{end}}\nEquipment: {{pads}}\n\nNothing further is needed from you. Welcome back!\n\nBest regards\nRentR',
-    adminNew: 'New booking request {{bookingNumber}} from {{name}} ({{email}}).',
-    adminChange: 'Change request for {{bookingNumber}}.',
-    adminCancelled: 'Booking {{bookingNumber}} cancelled by the guest.',
-    adminCancelledBody:
-      '{{name}} ({{email}}) cancelled booking {{bookingNumber}}.\nPeriod: {{start}} – {{end}}\nEquipment: {{pads}}\n\nThe dates are bookable again. No action needed.\nBooking: {{url}}\n',
+    cancelledIntro: 'Your booking is cancelled and the dates are free again. Nothing further is needed from you.',
+    adminNewSubject: 'New request {{bookingNumber}}',
+    adminNewIntro: 'A new booking request has arrived.',
+    adminChangeSubject: 'Change requested {{bookingNumber}}',
+    adminChangeIntro: 'The guest requested a change to the booking.',
+    adminCancelledSubject: 'Cancelled {{bookingNumber}}',
+    adminCancelledIntro: 'The guest cancelled. The dates are bookable again — no action needed.',
     doorPassSubject: 'Door link {{start}} – {{end}}',
-    doorPassBody:
-      'Hi {{name}},\n\nHere is your link to open the door.\nValid: {{start}} – {{end}} (both days inclusive).\n\nOpen: {{url}}\n\nThe page only shows Open door during the validity period.\n',
+    doorPassIntro: 'Here is your link to open the storage. Open door only works during the validity period.',
+    labelPeriod: 'Period',
+    labelDays: 'Days',
+    labelPads: 'Equipment',
+    labelTotal: 'Total',
+    labelStatus: 'Status',
+    labelGuest: 'Guest',
+    labelManage: 'Manage booking',
+    labelOpen: 'Open door',
+    labelValid: 'Valid',
+    daysNote: 'Start and end dates each count as a full day.',
+    payNote: 'Payment is arranged separately / on site.',
+    greeting: 'Hi {{name}},',
+    signoff: 'Best regards\nRentR',
   },
   de: {
     createdSubject: 'Buchungsanfrage {{bookingNumber}} erhalten',
-    createdBody:
-      'Hallo {{name}},\n\nIhre Anfrage {{bookingNumber}} wurde erhalten.\nZeitraum: {{start}} – {{end}} ({{days}} Tage; Start- und Enddatum zählen als volle Tage).\nAusrüstung: {{pads}}\nSumme: {{total}} {{currency}}\n\nZahlung erfolgt nach Absprache / vor Ort.\nBuchung verwalten: {{url}}\n\nFreundliche Grüße\nRentR',
+    createdIntro: 'Ihre Anfrage wurde erhalten und wartet auf Freigabe.',
     statusSubject: 'Buchung {{bookingNumber}}: {{status}}',
-    statusBody:
-      'Hallo {{name}},\n\nStatus für Buchung {{bookingNumber}} ist jetzt: {{status}}.\nZeitraum: {{start}} – {{end}} ({{days}} Tage).\nSumme: {{total}} {{currency}}\n\nVerwalten: {{url}}\n\nFreundliche Grüße\nRentR',
+    statusIntro: 'Der Status Ihrer Buchung wurde aktualisiert.',
     cancelledSubject: 'Buchung {{bookingNumber}} ist storniert',
-    cancelledBody:
-      'Hallo {{name}},\n\nIhre Buchung {{bookingNumber}} ist storniert und die Daten sind wieder frei.\nZeitraum: {{start}} – {{end}}\nAusrüstung: {{pads}}\n\nEs ist nichts weiter zu tun. Willkommen zurück!\n\nFreundliche Grüße\nRentR',
-    adminNew: 'Neue Buchungsanfrage {{bookingNumber}} von {{name}} ({{email}}).',
-    adminChange: 'Änderungsanfrage für {{bookingNumber}}.',
-    adminCancelled: 'Buchung {{bookingNumber}} vom Gast storniert.',
-    adminCancelledBody:
-      '{{name}} ({{email}}) hat Buchung {{bookingNumber}} storniert.\nZeitraum: {{start}} – {{end}}\nAusrüstung: {{pads}}\n\nDie Daten sind wieder buchbar. Keine Aktion nötig.\nBuchung: {{url}}\n',
+    cancelledIntro: 'Ihre Buchung ist storniert und die Daten sind wieder frei. Es ist nichts weiter zu tun.',
+    adminNewSubject: 'Neue Anfrage {{bookingNumber}}',
+    adminNewIntro: 'Eine neue Buchungsanfrage ist eingegangen.',
+    adminChangeSubject: 'Änderung angefragt {{bookingNumber}}',
+    adminChangeIntro: 'Der Gast hat eine Änderung der Buchung angefragt.',
+    adminCancelledSubject: 'Storniert {{bookingNumber}}',
+    adminCancelledIntro: 'Der Gast hat storniert. Die Daten sind wieder buchbar — keine Aktion nötig.',
     doorPassSubject: 'Tür-Link {{start}} – {{end}}',
-    doorPassBody:
-      'Hallo {{name}},\n\nHier ist Ihr Link zum Öffnen der Tür.\nGültig: {{start}} – {{end}} (beide Tage inklusive).\n\nÖffnen: {{url}}\n\nDie Seite zeigt nur Open door während der Gültigkeit.\n',
+    doorPassIntro: 'Hier ist Ihr Link zum Öffnen des Lagers. Open door funktioniert nur während der Gültigkeit.',
+    labelPeriod: 'Zeitraum',
+    labelDays: 'Tage',
+    labelPads: 'Ausrüstung',
+    labelTotal: 'Summe',
+    labelStatus: 'Status',
+    labelGuest: 'Gast',
+    labelManage: 'Buchung verwalten',
+    labelOpen: 'Tür öffnen',
+    labelValid: 'Gültig',
+    daysNote: 'Start- und Enddatum zählen als volle Tage.',
+    payNote: 'Zahlung erfolgt nach Absprache / vor Ort.',
+    greeting: 'Hallo {{name}},',
+    signoff: 'Freundliche Grüße\nRentR',
   },
 };
 
-function tMail(locale, key, vars) {
+function t(locale, key, vars) {
   const dict = MAIL_I18N[locale] || MAIL_I18N.sv;
   let text = dict[key] || MAIL_I18N.sv[key] || key;
   for (const [k, v] of Object.entries(vars || {})) {
-    text = text.split('{{' + k + '}}').join(String(v));
+    text = text.split('{{' + k + '}}').join(String(v ?? ''));
   }
   return text;
 }
@@ -82,10 +112,18 @@ function mailSubject(text) {
 }
 
 function manageUrl(pagesBaseUrl, token) {
-  return (pagesBaseUrl || '').replace(/\/$/, '') + '/booking.html?t=' + encodeURIComponent(token);
+  return (pagesBaseUrl || '').replace(/\/$/, '') + '/booking.html?t=' + encodeURIComponent(token || '');
 }
 
-function bookingMailVars(booking, magicToken, cfg) {
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function bookingVars(booking, magicToken, cfg) {
   const locale = booking.locale || 'sv';
   return {
     name: (booking.firstName + ' ' + booking.lastName).trim(),
@@ -93,16 +131,89 @@ function bookingMailVars(booking, magicToken, cfg) {
     start: booking.startDate,
     end: booking.endDate,
     days: booking.days,
-    pads: (booking.pads || []).map((p) => p.name).join(', '),
+    pads: (booking.pads || []).map((p) => p.name).join(', ') || '—',
     total: booking.priceTotal,
     currency: (cfg && cfg.currency) || 'SEK',
     status: statusLabel(booking.status, locale),
     email: booking.email,
     url: manageUrl(cfg && cfg.pagesBaseUrl, magicToken || ''),
+    locale,
   };
 }
 
-/** POST rendered messages to the GAS mail-only webhook. */
+/** Build a clean plain-text + HTML message pair. */
+function compose(locale, opts) {
+  const v = opts.vars || {};
+  const rows = opts.rows || [];
+  const greeting = t(locale, 'greeting', v);
+  const signoff = t(locale, 'signoff', v);
+
+  const textLines = [greeting, '', opts.intro || ''];
+  if (opts.bookingNumber) textLines.push('', opts.bookingNumber);
+  textLines.push('');
+  for (const row of rows) {
+    textLines.push(row.label + ': ' + row.value);
+  }
+  if (opts.notes && opts.notes.length) {
+    textLines.push('');
+    for (const n of opts.notes) textLines.push(n);
+  }
+  if (opts.ctaUrl) {
+    textLines.push('', (opts.ctaLabel || 'Link') + ':', opts.ctaUrl);
+  }
+  textLines.push('', signoff);
+
+  const rowHtml = rows
+    .map(
+      (row) =>
+        `<tr><td style="padding:6px 12px 6px 0;color:#5a6f7a;vertical-align:top;white-space:nowrap;">${escapeHtml(row.label)}</td>` +
+        `<td style="padding:6px 0;color:#1a2b33;"><strong>${escapeHtml(row.value)}</strong></td></tr>`
+    )
+    .join('');
+
+  const notesHtml = (opts.notes || [])
+    .map((n) => `<p style="margin:8px 0 0;color:#5a6f7a;font-size:14px;">${escapeHtml(n)}</p>`)
+    .join('');
+
+  const ctaHtml = opts.ctaUrl
+    ? `<p style="margin:24px 0 0;"><a href="${escapeHtml(opts.ctaUrl)}" style="display:inline-block;background:#0d6e6e;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:600;">${escapeHtml(opts.ctaLabel || 'Öppna')}</a></p>
+       <p style="margin:10px 0 0;color:#5a6f7a;font-size:12px;word-break:break-all;">${escapeHtml(opts.ctaUrl)}</p>`
+    : '';
+
+  const html =
+    `<div style="font-family:Segoe UI,Helvetica Neue,Arial,sans-serif;font-size:16px;line-height:1.45;color:#1a2b33;max-width:560px;margin:0 auto;padding:8px;">` +
+    `<p style="margin:0 0 4px;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:#0d6e6e;font-weight:700;">${escapeHtml(APP_NAME)}</p>` +
+    (opts.bookingNumber
+      ? `<p style="margin:0 0 16px;font-size:22px;font-weight:700;">${escapeHtml(opts.bookingNumber)}</p>`
+      : '') +
+    `<p style="margin:0 0 8px;">${escapeHtml(greeting)}</p>` +
+    `<p style="margin:0 0 16px;">${escapeHtml(opts.intro || '')}</p>` +
+    (rows.length
+      ? `<table style="border-collapse:collapse;width:100%;margin:0 0 8px;background:#f4f8f8;border-radius:12px;overflow:hidden;"><tbody>${rowHtml}</tbody></table>`
+      : '') +
+    notesHtml +
+    ctaHtml +
+    `<p style="margin:28px 0 0;color:#5a6f7a;font-size:14px;white-space:pre-line;">${escapeHtml(signoff)}</p>` +
+    `</div>`;
+
+  return {
+    subject: mailSubject(opts.subject),
+    body: textLines.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n'),
+    html,
+  };
+}
+
+function bookingRows(locale, v, { withStatus = false, withTotal = true } = {}) {
+  const rows = [
+    { label: t(locale, 'labelPeriod'), value: `${v.start} – ${v.end}` },
+    { label: t(locale, 'labelDays'), value: String(v.days) },
+    { label: t(locale, 'labelPads'), value: v.pads },
+  ];
+  if (withTotal) rows.push({ label: t(locale, 'labelTotal'), value: `${v.total} ${v.currency}` });
+  if (withStatus) rows.push({ label: t(locale, 'labelStatus'), value: v.status });
+  return rows;
+}
+
 export async function sendMessages(env, messages) {
   const url = env.MAIL_WEBHOOK_URL;
   if (!url || !messages || !messages.length) return;
@@ -124,84 +235,116 @@ async function adminEmails(db) {
   return (results || []).map((r) => r.email);
 }
 
-async function cfgForMail(db) {
-  return getConfigMap(db);
+function toMessage(to, composed) {
+  return { to, subject: composed.subject, body: composed.body, html: composed.html };
 }
 
 export async function mailBookingCreated(env, booking, magicToken) {
-  const cfg = await cfgForMail(env.DB);
+  const cfg = await getConfigMap(env.DB);
   const locale = booking.locale || 'sv';
-  const vars = bookingMailVars(booking, magicToken, cfg);
-  const messages = [
-    {
-      to: booking.email,
-      subject: mailSubject(tMail(locale, 'createdSubject', vars)),
-      body: tMail(locale, 'createdBody', vars),
-    },
-  ];
-  const admins = await adminEmails(env.DB);
-  const adminSubj = mailSubject(tMail('sv', 'adminNew', vars));
-  const adminBody = tMail('sv', 'adminNew', vars) + '\n' + vars.url;
-  for (const to of admins) messages.push({ to, subject: adminSubj, body: adminBody });
+  const v = bookingVars(booking, magicToken, cfg);
+  const guest = compose(locale, {
+    subject: t(locale, 'createdSubject', v),
+    bookingNumber: v.bookingNumber,
+    intro: t(locale, 'createdIntro', v),
+    vars: v,
+    rows: bookingRows(locale, v),
+    notes: [t(locale, 'daysNote'), t(locale, 'payNote')],
+    ctaLabel: t(locale, 'labelManage'),
+    ctaUrl: v.url,
+  });
+  const messages = [toMessage(booking.email, guest)];
+
+  const admin = compose('sv', {
+    subject: t('sv', 'adminNewSubject', v),
+    bookingNumber: v.bookingNumber,
+    intro: t('sv', 'adminNewIntro', v),
+    vars: { name: 'admin' },
+    rows: [
+      { label: t('sv', 'labelGuest'), value: `${v.name} (${v.email})` },
+      ...bookingRows('sv', v),
+    ],
+    ctaLabel: t('sv', 'labelManage'),
+    ctaUrl: v.url,
+  });
+  for (const to of await adminEmails(env.DB)) messages.push(toMessage(to, admin));
   await sendMessages(env, messages);
 }
 
 export async function mailGuestStatus(env, booking, magicToken) {
-  const cfg = await cfgForMail(env.DB);
+  const cfg = await getConfigMap(env.DB);
   const locale = booking.locale || 'sv';
-  const vars = bookingMailVars(booking, magicToken, cfg);
-  await sendMessages(env, [
-    {
-      to: booking.email,
-      subject: mailSubject(tMail(locale, 'statusSubject', vars)),
-      body: tMail(locale, 'statusBody', vars),
-    },
-  ]);
+  const v = bookingVars(booking, magicToken, cfg);
+  const msg = compose(locale, {
+    subject: t(locale, 'statusSubject', v),
+    bookingNumber: v.bookingNumber,
+    intro: t(locale, 'statusIntro', v),
+    vars: v,
+    rows: bookingRows(locale, v, { withStatus: true }),
+    ctaLabel: t(locale, 'labelManage'),
+    ctaUrl: v.url,
+  });
+  await sendMessages(env, [toMessage(booking.email, msg)]);
 }
 
 export async function mailGuestCancelled(env, booking, magicToken) {
-  const cfg = await cfgForMail(env.DB);
+  const cfg = await getConfigMap(env.DB);
   const locale = booking.locale || 'sv';
-  const vars = bookingMailVars(booking, magicToken, cfg);
-  const messages = [
-    {
-      to: booking.email,
-      subject: mailSubject(tMail(locale, 'cancelledSubject', vars)),
-      body: tMail(locale, 'cancelledBody', vars),
-    },
-  ];
-  const admins = await adminEmails(env.DB);
-  const adminSubj = mailSubject(tMail('sv', 'adminCancelled', vars));
-  const adminBody = tMail('sv', 'adminCancelledBody', vars);
-  for (const to of admins) messages.push({ to, subject: adminSubj, body: adminBody });
+  const v = bookingVars(booking, magicToken, cfg);
+  const guest = compose(locale, {
+    subject: t(locale, 'cancelledSubject', v),
+    bookingNumber: v.bookingNumber,
+    intro: t(locale, 'cancelledIntro', v),
+    vars: v,
+    rows: bookingRows(locale, v, { withTotal: false }),
+  });
+  const messages = [toMessage(booking.email, guest)];
+  const admin = compose('sv', {
+    subject: t('sv', 'adminCancelledSubject', v),
+    bookingNumber: v.bookingNumber,
+    intro: t('sv', 'adminCancelledIntro', v),
+    vars: { name: 'admin' },
+    rows: [
+      { label: t('sv', 'labelGuest'), value: `${v.name} (${v.email})` },
+      ...bookingRows('sv', v, { withTotal: false }),
+    ],
+    ctaLabel: t('sv', 'labelManage'),
+    ctaUrl: v.url,
+  });
+  for (const to of await adminEmails(env.DB)) messages.push(toMessage(to, admin));
   await sendMessages(env, messages);
 }
 
 export async function mailAdminChange(env, booking, magicToken) {
-  const cfg = await cfgForMail(env.DB);
-  const vars = bookingMailVars(booking, magicToken, cfg);
+  const cfg = await getConfigMap(env.DB);
+  const v = bookingVars(booking, magicToken, cfg);
+  const admin = compose('sv', {
+    subject: t('sv', 'adminChangeSubject', v),
+    bookingNumber: v.bookingNumber,
+    intro: t('sv', 'adminChangeIntro', v),
+    vars: { name: 'admin' },
+    rows: [
+      { label: t('sv', 'labelGuest'), value: `${v.name} (${v.email})` },
+      ...bookingRows('sv', v),
+    ],
+    ctaLabel: t('sv', 'labelManage'),
+    ctaUrl: v.url,
+  });
   const admins = await adminEmails(env.DB);
-  const subject = mailSubject(tMail('sv', 'adminChange', vars));
-  const body = tMail('sv', 'adminChange', vars);
-  await sendMessages(
-    env,
-    admins.map((to) => ({ to, subject, body }))
-  );
+  await sendMessages(env, admins.map((to) => toMessage(to, admin)));
 }
 
 export async function mailDoorPass(env, pass, url) {
   const locale = pass.locale || 'sv';
-  const vars = {
-    name: pass.recipientName,
-    start: pass.startDate,
-    end: pass.endDate,
-    url,
-  };
-  await sendMessages(env, [
-    {
-      to: pass.recipientEmail,
-      subject: mailSubject(tMail(locale, 'doorPassSubject', vars)),
-      body: tMail(locale, 'doorPassBody', vars),
-    },
-  ]);
+  const vars = { name: pass.recipientName, start: pass.startDate, end: pass.endDate, url };
+  const msg = compose(locale, {
+    subject: t(locale, 'doorPassSubject', vars),
+    intro: t(locale, 'doorPassIntro', vars),
+    vars,
+    rows: [{ label: t(locale, 'labelValid'), value: `${pass.startDate} – ${pass.endDate}` }],
+    notes: [t(locale, 'daysNote')],
+    ctaLabel: t(locale, 'labelOpen'),
+    ctaUrl: url,
+  });
+  await sendMessages(env, [toMessage(pass.recipientEmail, msg)]);
 }

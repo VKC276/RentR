@@ -39,17 +39,28 @@ function isDoorPassValidToday(pass) {
 
 export function enrichDoorPass(pass) {
   if (!pass) return null;
+  const startDate = pass.start_date || pass.startDate;
+  const endDate = pass.end_date || pass.endDate;
+  const today = todayYmd();
   const valid = isDoorPassValidToday(pass);
+  let doorState = 'passed';
+  if (pass.revoked) doorState = 'revoked';
+  else if (valid) doorState = 'active';
+  else if (today < String(startDate)) doorState = 'upcoming';
+
   return {
     id: pass.id,
     recipientName: pass.recipient_name || pass.recipientName,
     recipientEmail: pass.recipient_email || pass.recipientEmail,
-    startDate: pass.start_date || pass.startDate,
-    endDate: pass.end_date || pass.endDate,
+    startDate,
+    endDate,
     locale: pass.locale || 'sv',
     revoked: !!pass.revoked,
     showOpenDoor: valid,
     validToday: valid,
+    doorUi: !pass.revoked,
+    doorState,
+    activeDate: startDate,
   };
 }
 
@@ -89,6 +100,11 @@ export async function openDoor(env, token) {
       .prepare(`UPDATE bookings SET door_opened_for_return = 1, updated_at = ? WHERE id = ?`)
       .bind(nowIso(), booking.id)
       .run();
+  } else if (flags.mode === 'pickup') {
+    await db
+      .prepare(`UPDATE bookings SET door_opened_for_pickup = 1, updated_at = ? WHERE id = ?`)
+      .bind(nowIso(), booking.id)
+      .run();
   }
 
   return {
@@ -120,14 +136,44 @@ async function openDoorFromPass(env, passRow) {
   };
 }
 
+export async function confirmPickup(env, token, ctx) {
+  const db = env.DB;
+  const t = await resolveMagicToken(db, token);
+  if (!t) throw softError('Ogiltig länk', 401);
+  const row = await db.prepare(`SELECT * FROM bookings WHERE id = ?`).bind(t.booking_id).first();
+  if (!row) throw softError('Bokning saknas', 404);
+  if (!row.allow_self_pickup) throw softError('Egen hämtning är inte tillåten', 403);
+  if (!row.door_opened_for_pickup) throw softError('Öppna dörren först', 400);
+  if (row.status !== 'Approved') throw softError('Kan inte bekräfta utlämning i denna status', 400);
+  if (String(row.start_date) !== todayYmd()) {
+    throw softError('Utlämning kan bara bekräftas på startdagen', 400);
+  }
+
+  const now = nowIso();
+  await db
+    .prepare(
+      `UPDATE bookings SET status = 'HandedOut', door_opened_for_pickup = 0, updated_at = ? WHERE id = ?`
+    )
+    .bind(now, row.id)
+    .run();
+  await logEvent(db, row.id, 'confirm_pickup', row.email, {});
+  const booking = await enrichBooking(db, row.id);
+  kick(ctx, mailGuestStatus(env, booking, token));
+  return { booking };
+}
+
 export async function confirmReturn(env, token, ctx) {
   const db = env.DB;
   const t = await resolveMagicToken(db, token);
   if (!t) throw softError('Ogiltig länk', 401);
   const row = await db.prepare(`SELECT * FROM bookings WHERE id = ?`).bind(t.booking_id).first();
   if (!row) throw softError('Bokning saknas', 404);
+  if (!row.allow_self_return) throw softError('Egen återlämning är inte tillåten', 403);
   if (!row.door_opened_for_return) throw softError('Öppna dörren först', 400);
-  if (row.status === 'Returned') throw softError('Redan återlämnad', 400);
+  if (row.status !== 'HandedOut') throw softError('Kan inte bekräfta återlämning i denna status', 400);
+  if (String(row.end_date) !== todayYmd()) {
+    throw softError('Återlämning kan bara bekräftas på slutdagen', 400);
+  }
 
   const now = nowIso();
   await db

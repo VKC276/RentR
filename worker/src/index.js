@@ -35,6 +35,7 @@ import {
 import { listUsers, createUser, updateUser, deleteUser } from './users.js';
 import {
   openDoor,
+  confirmPickup,
   confirmReturn,
   pollDoor,
   completeDoor,
@@ -105,6 +106,8 @@ async function route(env, action, body, ctx) {
       return guestCancelBooking(env, body.magicToken || body.t, ctx);
     case 'openDoor':
       return openDoor(env, body.magicToken || body.t);
+    case 'confirmPickup':
+      return confirmPickup(env, body.magicToken || body.t, ctx);
     case 'confirmReturn':
       return confirmReturn(env, body.magicToken || body.t, ctx);
     case 'getDoorPass':

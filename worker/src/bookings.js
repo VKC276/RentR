@@ -31,7 +31,8 @@ const BOOKING_SELECT = `
          paid, paid_at AS paidAt, price_base AS priceBase, price_discount AS priceDiscount,
          price_total AS priceTotal, price_override AS priceOverride,
          price_breakdown_json AS priceBreakdownJson,
-         door_opened_for_return AS doorOpenedForReturn, notes,
+         door_opened_for_return AS doorOpenedForReturn,
+         door_opened_for_pickup AS doorOpenedForPickup, notes,
          created_at AS createdAt, updated_at AS updatedAt
   FROM bookings`;
 
@@ -96,31 +97,99 @@ export function computeOpenDoorFlags(b) {
   const status = b.status;
   const allowPickup = !!(b.allowSelfPickup || b.allow_self_pickup);
   const allowReturn = !!(b.allowSelfReturn || b.allow_self_return);
-  const startDate = b.startDate || b.start_date;
-  const endDate = b.endDate || b.end_date;
-  const doorOpened = !!(b.doorOpenedForReturn || b.door_opened_for_return);
+  const startDate = String(b.startDate || b.start_date || '');
+  const endDate = String(b.endDate || b.end_date || '');
+  const doorOpenedReturn = !!(b.doorOpenedForReturn || b.door_opened_for_return);
+  const doorOpenedPickup = !!(b.doorOpenedForPickup || b.door_opened_for_pickup);
+  // Pickup only while still Approved; return only after HandedOut — keeps same-day rentals ordered.
+  const pickupActive = allowPickup && status === 'Approved' && startDate === today;
+  const returnActive = allowReturn && status === 'HandedOut' && endDate === today;
+  const doorUi =
+    (status === 'Approved' || status === 'HandedOut') && (allowPickup || allowReturn);
 
-  const pickup =
-    allowPickup && (status === 'Approved' || status === 'HandedOut') && String(startDate) === today;
-  const ret =
-    allowReturn &&
-    (status === 'HandedOut' || status === 'Approved') &&
-    String(endDate) === today &&
-    status !== 'Returned';
+  const base = {
+    showOpenDoor: false,
+    showConfirmReturn: false,
+    showConfirmPickup: false,
+    mode: null,
+    doorUi: false,
+    doorState: 'hidden',
+    activeDate: null,
+    startDate,
+    endDate,
+    allowPickup,
+    allowReturn,
+  };
 
   if (status === 'Returned') {
-    return { showOpenDoor: false, showConfirmReturn: false, mode: null };
+    return { ...base, doorState: 'done' };
   }
-  if (ret && doorOpened) {
-    return { showOpenDoor: false, showConfirmReturn: true, mode: 'return' };
+  if (!doorUi) return base;
+
+  if (returnActive && doorOpenedReturn) {
+    return {
+      ...base,
+      doorUi: true,
+      showConfirmReturn: true,
+      mode: 'return',
+      doorState: 'confirmReturn',
+      activeDate: endDate,
+    };
   }
-  if (ret) {
-    return { showOpenDoor: true, showConfirmReturn: false, mode: 'return' };
+  if (returnActive) {
+    return {
+      ...base,
+      doorUi: true,
+      showOpenDoor: true,
+      mode: 'return',
+      doorState: 'active',
+      activeDate: endDate,
+    };
   }
-  if (pickup) {
-    return { showOpenDoor: true, showConfirmReturn: false, mode: 'pickup' };
+  if (pickupActive && doorOpenedPickup) {
+    return {
+      ...base,
+      doorUi: true,
+      showConfirmPickup: true,
+      mode: 'pickup',
+      doorState: 'confirmPickup',
+      activeDate: startDate,
+    };
   }
-  return { showOpenDoor: false, showConfirmReturn: false, mode: null };
+  if (pickupActive) {
+    return {
+      ...base,
+      doorUi: true,
+      showOpenDoor: true,
+      mode: 'pickup',
+      doorState: 'active',
+      activeDate: startDate,
+    };
+  }
+
+  const candidates = [];
+  if (allowPickup && status === 'Approved' && startDate > today) {
+    candidates.push({ date: startDate, mode: 'pickup' });
+  }
+  if (allowReturn && (status === 'Approved' || status === 'HandedOut') && endDate > today) {
+    candidates.push({ date: endDate, mode: 'return' });
+  }
+  candidates.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  if (candidates.length) {
+    return {
+      ...base,
+      doorUi: true,
+      mode: candidates[0].mode,
+      doorState: 'upcoming',
+      activeDate: candidates[0].date,
+    };
+  }
+  return {
+    ...base,
+    doorUi: true,
+    doorState: 'passed',
+  };
 }
 
 export async function releasePadLocks(db, bookingId) {
@@ -211,6 +280,7 @@ export async function enrichBooking(db, id) {
     allowSelfReturn: !!b.allowSelfReturn,
     paid: !!b.paid,
     doorOpenedForReturn: !!b.doorOpenedForReturn,
+    doorOpenedForPickup: !!b.doorOpenedForPickup,
     priceTotal,
     priceOverride: hasOverride ? b.priceOverride : null,
     padIds: pads.map((p) => p.id),
@@ -259,6 +329,7 @@ function enrichFromRow(b, index) {
     priceOverride: hasOverride ? b.priceOverride : null,
     priceBreakdownJson: b.priceBreakdownJson || '',
     doorOpenedForReturn: !!b.doorOpenedForReturn,
+    doorOpenedForPickup: !!b.doorOpenedForPickup,
     notes: b.notes || '',
     createdAt: b.createdAt,
     updatedAt: b.updatedAt,
@@ -586,7 +657,8 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       await replacePadsAndLocks(db, bookingId, nextPads, b.start_date, b.end_date);
       await db
         .prepare(
-          `UPDATE bookings SET status = 'HandedOut', price_base = ?, price_discount = ?,
+          `UPDATE bookings SET status = 'HandedOut', door_opened_for_pickup = 0,
+           price_base = ?, price_discount = ?,
            price_total = ?, price_breakdown_json = ?, updated_at = ? WHERE id = ?`
         )
         .bind(
@@ -600,7 +672,9 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
         .run();
     } else {
       await db
-        .prepare(`UPDATE bookings SET status = 'HandedOut', updated_at = ? WHERE id = ?`)
+        .prepare(
+          `UPDATE bookings SET status = 'HandedOut', door_opened_for_pickup = 0, updated_at = ? WHERE id = ?`
+        )
         .bind(now, bookingId)
         .run();
     }

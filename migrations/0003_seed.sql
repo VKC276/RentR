@@ -26,7 +26,7 @@ INSERT OR IGNORE INTO config (key, value) VALUES
   ('relayPulseMs', '1000'),
   ('appName', 'RentR'),
   ('timezone', 'Europe/Stockholm'),
-  ('pagesBaseUrl', 'http://ledinfo.vastervikclimbing.se/RentR'),
+  ('pagesBaseUrl', 'https://rent.vastervikclimbing.se'),
   ('sessionHours', '0'),
   ('magicLinkDays', '90');
 

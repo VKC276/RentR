@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <base href="/RentR/" />
+  <base href="/" />
   <title>RentR — Admin</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
@@ -33,6 +33,15 @@
     <div id="app" hidden>
       <div class="panel" id="bookingsSection">
         <h2>Bokningar</h2>
+        <div class="timeline" id="timeline">
+          <div class="timeline-head">
+            <strong>Tidslinje</strong>
+            <span class="muted" id="timelineRange">Nästa 14 dagar</span>
+          </div>
+          <div class="timeline-scroll" id="timelineScroll">
+            <p class="muted" id="timelineEmpty">Inga aktiva bokningar i perioden.</p>
+          </div>
+        </div>
         <div class="row">
           <div><label>Sök bokningsnummer</label><input id="searchNo" placeholder="2026-00001" /></div>
           <div><label>Status</label>

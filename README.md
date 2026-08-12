@@ -52,10 +52,10 @@ Default admin after seed: `admin@example.com` / `Admin123!` — **change immedia
 
 ## 2. GitHub Pages
 
-Live: **http://ledinfo.vastervikclimbing.se/RentR/**
+Live: **https://rent.vastervikclimbing.se/**
 
 1. `js/config.js` is already set to the GAS `/exec` URL.
-2. In Sheet `Config`, set `pagesBaseUrl` to `http://ledinfo.vastervikclimbing.se/RentR` (no trailing slash).
+2. In D1 `config`, set `pagesBaseUrl` to `https://rent.vastervikclimbing.se` (no trailing slash).
 3. Pages: deploy from branch `main`, folder **`/` (root)**.
 4. Open the site and book a test period.
 

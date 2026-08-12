@@ -1,8 +1,18 @@
 (function () {
   var session = localStorage.getItem('adminSession') || '';
   var bookings = [];
+  var timelineBookings = [];
   var passes = [];
   var selectedId = null;
+
+  var TIMELINE_DAYS = 14;
+  var TIMELINE_ACTIVE = {
+    Requested: true,
+    Approved: true,
+    ChangePending: true,
+    CancelPending: true,
+    HandedOut: true
+  };
 
   function $(id) { return document.getElementById(id); }
 
@@ -117,6 +127,7 @@
       renderRules(res.rules || []);
       renderUsers(res.users || []);
       renderPasses(res.passes || []);
+      return loadTimeline();
     }).catch(function (e) {
       if (e.status === 401) showLogin(true);
       else alert(e.message);
@@ -129,10 +140,194 @@
       status: $('filterStatus').value
     }).then(function (res) {
       renderBookings(res.bookings || []);
+      return loadTimeline();
     }).catch(function (e) {
       if (e.status === 401) showLogin(true);
       else alert(e.message);
     });
+  }
+
+  /** Timeline ignores list filters so “närmast i tid” always stays visible. */
+  function loadTimeline() {
+    return Api.call('listBookings', { bookingNumber: '', status: '' }, session)
+      .then(function (res) {
+        timelineBookings = res.bookings || [];
+        renderTimeline();
+      })
+      .catch(function () {
+        // Keep whatever was shown; list errors are already handled above.
+      });
+  }
+
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+
+  function todayYmd() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function addDaysYmd(ymd, days) {
+    var p = String(ymd).split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function weekdayShort(ymd) {
+    var p = String(ymd).split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return ['sö', 'må', 'ti', 'on', 'to', 'fr', 'lö'][d.getDay()];
+  }
+
+  function dayNum(ymd) {
+    return String(ymd).slice(8);
+  }
+
+  function overlaps(aStart, aEnd, bStart, bEnd) {
+    return aStart <= bEnd && aEnd >= bStart;
+  }
+
+  function assignLanes(items) {
+    var lanes = [];
+    items.forEach(function (item) {
+      var lane = 0;
+      while (lane < lanes.length) {
+        var clash = lanes[lane].some(function (other) {
+          return overlaps(item.visStart, item.visEnd, other.visStart, other.visEnd);
+        });
+        if (!clash) break;
+        lane++;
+      }
+      if (!lanes[lane]) lanes[lane] = [];
+      lanes[lane].push(item);
+      item.lane = lane;
+    });
+    return lanes.length || 1;
+  }
+
+  function daysBetween(a, b) {
+    var pa = String(a).split('-').map(Number);
+    var pb = String(b).split('-').map(Number);
+    var da = Date.UTC(pa[0], pa[1] - 1, pa[2]);
+    var db = Date.UTC(pb[0], pb[1] - 1, pb[2]);
+    return Math.round((db - da) / 86400000);
+  }
+
+  function whenLabel(b, today) {
+    if (b.startDate <= today && b.endDate >= today) {
+      if (b.endDate === today) return 'Sista dagen';
+      if (b.startDate === today) return 'Börjar idag';
+      return 'Pågår';
+    }
+    var until = daysBetween(today, b.startDate);
+    if (until === 1) return 'Imorgon';
+    if (until > 1) return 'Om ' + until + ' dagar';
+    return b.startDate;
+  }
+
+  function barTone(b) {
+    if (b.doubleBooked) return 'is-double';
+    if (b.status === 'Requested' || b.status === 'ChangePending' || b.status === 'CancelPending') {
+      return 'is-pending';
+    }
+    if (b.status === 'HandedOut') return 'is-out';
+    return 'is-ok';
+  }
+
+  function bindTimelineClicks(root) {
+    root.querySelectorAll('[data-id]').forEach(function (btn) {
+      btn.onclick = function () { openDetail(btn.getAttribute('data-id')); };
+    });
+  }
+
+  function renderTimeline() {
+    var wrap = $('timelineScroll');
+    var today = todayYmd();
+    var end = addDaysYmd(today, TIMELINE_DAYS - 1);
+    $('timelineRange').textContent = today + ' – ' + end;
+
+    var items = timelineBookings.filter(function (b) {
+      if (!TIMELINE_ACTIVE[b.status]) return false;
+      return overlaps(b.startDate, b.endDate, today, end);
+    }).map(function (b) {
+      var visStart = b.startDate < today ? today : b.startDate;
+      var visEnd = b.endDate > end ? end : b.endDate;
+      return {
+        booking: b,
+        visStart: visStart,
+        visEnd: visEnd
+      };
+    }).sort(function (a, b) {
+      if (a.visStart !== b.visStart) return a.visStart < b.visStart ? -1 : 1;
+      if (a.booking.startDate !== b.booking.startDate) {
+        return a.booking.startDate < b.booking.startDate ? -1 : 1;
+      }
+      return a.booking.bookingNumber < b.booking.bookingNumber ? -1 : 1;
+    });
+
+    if (!items.length) {
+      wrap.innerHTML = '<p class="muted" id="timelineEmpty">Inga aktiva bokningar i perioden.</p>';
+      return;
+    }
+
+    var laneCount = assignLanes(items);
+    var days = [];
+    for (var i = 0; i < TIMELINE_DAYS; i++) days.push(addDaysYmd(today, i));
+
+    var dayHeads = days.map(function (d, idx) {
+      var cls = 'timeline-day' + (d === today ? ' is-today' : '');
+      return '<div class="' + cls + '" style="grid-column:' + (idx + 1) + '">' +
+        '<span class="timeline-wd">' + weekdayShort(d) + '</span>' +
+        '<span class="timeline-dn">' + dayNum(d) + '</span></div>';
+    }).join('');
+
+    var bars = items.map(function (item) {
+      var b = item.booking;
+      var startIdx = days.indexOf(item.visStart);
+      var endIdx = days.indexOf(item.visEnd);
+      if (startIdx < 0 || endIdx < 0) return '';
+      var colStart = startIdx + 1;
+      var colEnd = endIdx + 2;
+      var pads = (b.pads || []).map(function (p) { return p.name; }).join(', ');
+      var shown = displayStatus(b);
+      var title = b.bookingNumber + ' · ' + b.firstName + ' ' + b.lastName +
+        ' · ' + b.startDate + ' – ' + b.endDate +
+        (pads ? ' · ' + pads : '') + ' · ' + statusLabel(shown);
+      return '<button type="button" class="timeline-bar ' + barTone(b) + '" data-id="' + b.id + '"' +
+        ' style="grid-column:' + colStart + ' / ' + colEnd + '; grid-row:' + (item.lane + 1) + '"' +
+        ' title="' + escapeHtml(title) + '">' +
+        '<span class="timeline-bar-no">' + escapeHtml(b.bookingNumber) + '</span>' +
+        '<span class="timeline-bar-who">' + escapeHtml(b.firstName + ' ' + b.lastName) + '</span>' +
+        '</button>';
+    }).join('');
+
+    var mobile = items.map(function (item) {
+      var b = item.booking;
+      var shown = displayStatus(b);
+      var pads = (b.pads || []).map(function (p) { return p.name; }).join(', ');
+      return '<button type="button" class="timeline-m-item ' + barTone(b) + '" data-id="' + b.id + '">' +
+        '<span class="timeline-m-when">' + escapeHtml(whenLabel(b, today)) + '</span>' +
+        '<span class="timeline-m-main">' +
+          '<span class="timeline-m-who">' + escapeHtml(b.firstName + ' ' + b.lastName) + '</span>' +
+          '<span class="timeline-m-meta">' + escapeHtml(b.bookingNumber) + ' · ' +
+            escapeHtml(b.startDate + ' – ' + b.endDate) +
+            (pads ? ' · ' + escapeHtml(pads) : '') +
+            ' · ' + escapeHtml(statusLabel(shown)) +
+          '</span>' +
+        '</span></button>';
+    }).join('');
+
+    wrap.innerHTML =
+      '<p class="timeline-swipe muted timeline-desktop-only">Svep i sidled för fler dagar</p>' +
+      '<div class="timeline-desktop">' +
+        '<div class="timeline-grid" style="--timeline-days:' + TIMELINE_DAYS + '; --timeline-lanes:' + laneCount + '">' +
+          '<div class="timeline-days">' + dayHeads + '</div>' +
+          '<div class="timeline-lanes">' + bars + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="timeline-mobile" aria-label="Kommande bokningar">' + mobile + '</div>';
+
+    bindTimelineClicks(wrap);
   }
 
   function renderBookings(list) {
@@ -205,13 +400,19 @@
       label + ' <span class="check-note" id="' + id + 'Note"></span></label>';
   }
 
+  function findBooking(id) {
+    return bookings.filter(function (x) { return x.id === id; })[0] ||
+      timelineBookings.filter(function (x) { return x.id === id; })[0];
+  }
+
   function openDetail(id) {
     selectedId = id;
-    var b = bookings.filter(function (x) { return x.id === id; })[0];
+    var b = findBooking(id);
     if (!b) return;
     showModal('detailModal');
     $('detailTitle').textContent = b.bookingNumber;
     var html = '';
+
     if (b.doubleBooked) {
       html += '<p><span class="badge badge-double">Dubbelbokat</span> ' +
         '<span class="muted">underliggande status: ' + escapeHtml(statusLabel(b.status)) + '</span></p>';
@@ -222,35 +423,71 @@
           c.otherStart + ' – ' + c.otherEnd + ', ' + escapeHtml(statusLabel(c.otherStatus)) + ')</li>';
       });
       html += '</ul><p class="muted">Byt till ledig utrustning nedan för att lösa krocken.</p></div>';
-    } else {
-      html += '<p><strong>' + b.bookingNumber + '</strong> — ' + escapeHtml(statusLabel(b.status)) + '</p>';
     }
-    html += '<p>' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' + escapeHtml(b.phone) + ' · ' + escapeHtml(b.email) + '</p>';
-    html += '<p>Utrustning: ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
-    html += '<p>' + b.startDate + ' – ' + b.endDate + ' (' + b.days + ' dygn inkl.)</p>';
-    html += '<p>Summa: <strong>' + b.priceTotal + ' SEK</strong></p>';
-    html += '<div class="check-row">';
-    html += flagCheckbox('flagPickup', 'Tillåt egen hämtning', b.allowSelfPickup);
-    html += flagCheckbox('flagReturn', 'Tillåt egen återlämning', b.allowSelfReturn);
-    html += '</div>';
+
+    html += '<div class="detail-summary">';
+    html += '<p class="detail-meta">';
+    html += '<span class="badge">' + escapeHtml(statusLabel(b.status)) + '</span> ';
+    html += '<span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' + (b.paid ? 'Betald' : 'Obetald') + '</span>';
+    html += '</p>';
+    html += '<p class="detail-guest"><strong>' + escapeHtml(b.firstName + ' ' + b.lastName) + '</strong></p>';
+    html += '<p class="muted">' + escapeHtml(b.phone) + ' · ' + escapeHtml(b.email) + '</p>';
+    html += '<dl class="detail-facts">';
+    html += '<div><dt>Utrustning</dt><dd>' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ') || '—') + '</dd></div>';
+    html += '<div><dt>Period</dt><dd>' + b.startDate + ' – ' + b.endDate + ' <span class="muted">(' + b.days + ' dygn)</span></dd></div>';
+    html += '<div><dt>Summa</dt><dd><strong>' + b.priceTotal + ' SEK</strong></dd></div>';
+    html += '</dl></div>';
+
+    html += '<section class="detail-section">';
+    html += '<h3>Betalning</h3>';
+    html += '<p class="detail-section-lead">' + (b.paid
+      ? 'Bokningen är markerad som betald.'
+      : 'Ingen betalning registrerad ännu.') + '</p>';
     html += '<div class="actions">';
+    html += '<button type="button" id="actPaid"' + (b.paid ? ' class="ghost"' : '') + '>' +
+      (b.paid ? 'Markera som obetald' : 'Markera som betald') + '</button>';
+    html += '</div></section>';
+
+    html += '<section class="detail-section">';
+    html += '<h3>Utlämning &amp; återlämning</h3>';
     if (b.status === 'Requested' || b.status === 'ChangePending') {
+      html += '<p class="detail-section-lead">Godkänn eller avslå förfrågan innan utlämning.</p>';
+      html += '<div class="actions">';
       html += '<button type="button" id="actApprove">Godkänn</button>';
       html += '<button type="button" class="ghost" id="actReject">Avslå</button>';
+      html += '</div>';
+    } else if (b.status === 'Approved') {
+      html += '<p class="detail-section-lead">Kontrollera utrustningen och bekräfta när gästen får den.</p>';
+      html += '<div class="actions"><button type="button" class="warn" id="actHandOut">Lämna ut</button></div>';
+    } else if (b.status === 'HandedOut') {
+      html += '<p class="detail-section-lead">Utrustningen är utlämnad. Markera när den är återlämnad.</p>';
+      html += '<div class="actions"><button type="button" id="actReturn">Markera återlämnad</button></div>';
+    } else if (b.status === 'Returned') {
+      html += '<p class="detail-section-lead muted">Återlämning är registrerad.</p>';
+    } else {
+      html += '<p class="detail-section-lead muted">Ingen utlämningsåtgärd för denna status.</p>';
     }
-    if (b.status === 'Approved') {
-      html += '<button type="button" class="warn" id="actHandOut">Lämna ut</button>';
-    }
-    if (b.status === 'HandedOut') {
-      html += '<button type="button" id="actReturn">Återlämnad</button>';
-    }
-    html += '<button type="button" class="secondary" id="actPaid">' + (b.paid ? 'Markera obetald' : 'Betald') + '</button>';
+    html += '<div id="handOutBox" class="detail-panel" hidden></div>';
+    html += '</section>';
+
+    html += '<section class="detail-section">';
+    html += '<h3>Självbetjäning</h3>';
+    html += '<p class="detail-section-lead muted">Gästen öppnar dörren och måste därefter bekräfta utlämning respektive återlämning.</p>';
+    html += '<div class="check-row">';
+    html += flagCheckbox('flagPickup', 'Tillåt egen hämtning (Open door → bekräfta utlämning)', b.allowSelfPickup);
+    html += flagCheckbox('flagReturn', 'Tillåt egen återlämning (Open door → bekräfta återlämning)', b.allowSelfReturn);
+    html += '</div></section>';
+
     if (['Returned', 'Cancelled', 'Rejected'].indexOf(b.status) < 0) {
-      html += '<button type="button" class="ghost" id="actEditPads">Ändra utrustning</button>';
+      html += '<section class="detail-section">';
+      html += '<h3>Utrustning</h3>';
+      html += '<div class="actions"><button type="button" class="ghost" id="actEditPads">Ändra utrustning</button></div>';
+      html += '<div id="editPadsBox" class="detail-panel" hidden></div>';
+      html += '</section>';
+    } else {
+      html += '<div id="editPadsBox" hidden></div>';
     }
-    html += '</div>';
-    html += '<div id="handOutBox" hidden style="margin-top:1rem;padding:1rem;border:1px solid var(--line);border-radius:12px;"></div>';
-    html += '<div id="editPadsBox" hidden style="margin-top:1rem;padding:1rem;border:1px solid var(--line);border-radius:12px;"></div>';
+
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
 
@@ -388,22 +625,28 @@
       $('actHandOut').onclick = function () {
         var box = $('handOutBox');
         box.hidden = false;
-        box.innerHTML = '<p><strong>Lämna ut</strong></p><p id="hoPads">Laddar ledig utrustning…</p>';
+        box.innerHTML = '<p><strong>Bekräfta utlämning</strong></p><p class="muted">Laddar ledig utrustning…</p>';
         api('availablePadsForBooking', { bookingId: b.id }, $('actHandOut')).then(function (res) {
           var pads = (res.pads || []).filter(function (p) { return p.available || p.assigned; });
           var opts = pads.map(function (p) {
-            var sel = (b.padIds || [])[0] === p.id ? ' selected' : '';
-            var tag = p.assigned ? '' : (p.available ? '' : ' (upptagen)');
+            var sel = String((b.padIds || [])[0]) === String(p.id) ? ' selected' : '';
+            var tag = p.assigned ? ' (bokad)' : (p.available ? '' : ' (upptagen)');
             return '<option value="' + p.id + '"' + sel + '>' + escapeHtml(p.name) + tag + '</option>';
           }).join('');
           box.innerHTML =
-            '<p>Detaljer: ' + escapeHtml(b.firstName + ' ' + b.lastName) + ', ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) +
-            ', ' + b.startDate + '–' + b.endDate + '</p>' +
-            '<label>Utrustning</label><select id="hoSelect">' + opts + '</select>' +
-            '<div class="actions"><button type="button" id="hoOk">OK</button>' +
-            '<button type="button" class="ghost" id="hoChange">Ändra &amp; lämna ut</button></div>';
+            '<p><strong>Bekräfta utlämning</strong></p>' +
+            '<p class="muted">' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' +
+            b.startDate + ' – ' + b.endDate + '</p>' +
+            '<label for="hoSelect">Utrustning som lämnas ut</label>' +
+            '<select id="hoSelect">' + opts + '</select>' +
+            '<div class="actions">' +
+            '<button type="button" id="hoOk">Bekräfta utlämning</button>' +
+            '<button type="button" class="ghost" id="hoCancel">Avbryt</button>' +
+            '</div>';
           onAct('hoOk', 'handOut', function () { return { padId: $('hoSelect').value }; });
-          onAct('hoChange', 'handOut', function () { return { padId: $('hoSelect').value }; });
+          $('hoCancel').onclick = function () { box.hidden = true; box.innerHTML = ''; };
+        }).catch(function (e) {
+          box.innerHTML = '<p class="err">' + escapeHtml(e.message) + '</p>';
         });
       };
     }

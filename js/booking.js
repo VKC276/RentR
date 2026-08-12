@@ -16,6 +16,54 @@
   // The server accepts a cancellation up until the equipment is handed out.
   var CANCELLABLE = ['Requested', 'Approved', 'ChangePending', 'CancelPending'];
 
+  function doorStateLabel(od) {
+    if (od.doorState === 'active') return I18n.t('doorStateActive');
+    if (od.doorState === 'upcoming') return I18n.t('doorStateUpcoming', { date: od.activeDate || '' });
+    if (od.doorState === 'passed') return I18n.t('doorStatePassed');
+    if (od.doorState === 'revoked') return I18n.t('doorStateRevoked');
+    return '';
+  }
+
+  function renderDoorControls(od) {
+    if (od.showConfirmPickup) {
+      return '<div class="door-block door-confirm">' +
+        '<p class="door-steps"><strong>2 / 2</strong> — ' + escapeHtml(I18n.t('confirmPickupHint')) + '</p>' +
+        '<p class="muted door-hint">' + escapeHtml(I18n.t('selfServicePickupExplain')) + '</p>' +
+        '<p><button type="button" class="warn" id="btnConfirmPickup">' + I18n.t('confirmPickup') + '</button></p>' +
+        '</div>';
+    }
+    if (od.showConfirmReturn) {
+      return '<div class="door-block door-confirm">' +
+        '<p class="door-steps"><strong>2 / 2</strong> — ' + escapeHtml(I18n.t('confirmReturnHint')) + '</p>' +
+        '<p class="muted door-hint">' + escapeHtml(I18n.t('selfServiceReturnExplain')) + '</p>' +
+        '<p><button type="button" class="warn" id="btnConfirmReturn">' + I18n.t('confirmReturn') + '</button></p>' +
+        '</div>';
+    }
+    if (!od.doorUi) return '';
+
+    var enabled = !!od.showOpenDoor;
+    var modeHint = '';
+    if (od.mode === 'pickup') modeHint = I18n.t('selfServicePickupExplain');
+    else if (od.mode === 'return') modeHint = I18n.t('selfServiceReturnExplain');
+    else modeHint = I18n.t('openDoorHint');
+
+    var step = enabled
+      ? '<p class="door-steps"><strong>1 / 2</strong> — ' + escapeHtml(I18n.t('openDoorStepHint')) + '</p>'
+      : '';
+
+    var html = '';
+    html += '<div class="door-block">';
+    html += step;
+    html += '<p class="muted door-hint">' + escapeHtml(modeHint) + '</p>';
+    html += '<div class="door-row">';
+    html += '<button type="button" id="btnDoor"' + (enabled ? '' : ' disabled') + '>' +
+      I18n.t('openDoor') + '</button>';
+    html += '<span class="door-state' + (enabled ? ' is-active' : '') + '">' +
+      escapeHtml(doorStateLabel(od)) + '</span>';
+    html += '</div></div>';
+    return html;
+  }
+
   function render() {
     var b = booking;
     var od = b.openDoor || {};
@@ -27,12 +75,7 @@
     html += '<p>' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
     html += '<div class="price-box"><strong>' + I18n.t('total') + ': ' + b.priceTotal + ' SEK</strong><div class="muted">' + I18n.t('payNote') + '</div></div>';
 
-    if (od.showOpenDoor) {
-      html += '<p style="margin-top:1rem;"><button type="button" id="btnDoor">' + I18n.t('openDoor') + '</button></p>';
-    }
-    if (od.showConfirmReturn) {
-      html += '<p style="margin-top:1rem;"><button type="button" class="warn" id="btnConfirm">' + I18n.t('confirmReturn') + '</button></p>';
-    }
+    html += renderDoorControls(od);
 
     if (CANCELLABLE.indexOf(b.status) >= 0) {
       html += '<p style="margin-top:1rem;"><button type="button" class="ghost" id="btnCancel">' + I18n.t('cancelBooking') + '</button></p>';
@@ -46,7 +89,7 @@
     $('loading').hidden = true;
 
     var btnDoor = $('btnDoor');
-    if (btnDoor) {
+    if (btnDoor && !btnDoor.disabled) {
       btnDoor.onclick = function () {
         Status.button(btnDoor, I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token }))
           .then(function (res) {
@@ -55,10 +98,20 @@
           }).catch(function (e) { showErr(e.message); });
       };
     }
-    var btnConfirm = $('btnConfirm');
-    if (btnConfirm) {
-      btnConfirm.onclick = function () {
-        Status.button(btnConfirm, I18n.t('busyReturn'), Api.call('confirmReturn', { magicToken: token, t: token }))
+    var btnPickup = $('btnConfirmPickup');
+    if (btnPickup) {
+      btnPickup.onclick = function () {
+        Status.button(btnPickup, I18n.t('busyPickup'), Api.call('confirmPickup', { magicToken: token, t: token }))
+          .then(function (res) {
+            booking = res.booking;
+            render();
+          }).catch(function (e) { showErr(e.message); });
+      };
+    }
+    var btnReturn = $('btnConfirmReturn');
+    if (btnReturn) {
+      btnReturn.onclick = function () {
+        Status.button(btnReturn, I18n.t('busyReturn'), Api.call('confirmReturn', { magicToken: token, t: token }))
           .then(function (res) {
             booking = res.booking;
             render();

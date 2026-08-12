@@ -19,6 +19,16 @@
     });
   }
 
+  function doorStateLabel(od) {
+    if (od.doorState === 'active') return I18n.t('doorStateActive');
+    if (od.doorState === 'upcoming') {
+      return I18n.t('doorStateUpcoming', { date: od.startDate || od.activeDate || '' });
+    }
+    if (od.doorState === 'passed') return I18n.t('doorStatePassed');
+    if (od.doorState === 'revoked') return I18n.t('doorStateRevoked');
+    return '';
+  }
+
   function render() {
     var html = '';
     html += '<h1>' + escapeHtml(pass.recipientName) + '</h1>';
@@ -26,9 +36,16 @@
       escapeHtml(pass.startDate) + ' – ' + escapeHtml(pass.endDate) + '</strong></p>';
     html += '<p class="muted">' + I18n.t('doorValidHint') + '</p>';
 
-    if (pass.showOpenDoor) {
-      html += '<p style="margin-top:1.5rem;"><button type="button" id="btnDoor" style="font-size:1.15rem;padding:1rem 1.5rem;">' +
-        I18n.t('openDoor') + '</button></p>';
+    if (pass.doorUi || pass.showOpenDoor || pass.doorState) {
+      var enabled = !!pass.showOpenDoor;
+      html += '<div class="door-block">';
+      html += '<p class="muted door-hint">' + escapeHtml(I18n.t('openDoorHint')) + '</p>';
+      html += '<div class="door-row">';
+      html += '<button type="button" id="btnDoor" style="font-size:1.15rem;padding:1rem 1.5rem;"' +
+        (enabled ? '' : ' disabled') + '>' + I18n.t('openDoor') + '</button>';
+      html += '<span class="door-state' + (enabled ? ' is-active' : '') + '">' +
+        escapeHtml(doorStateLabel(pass)) + '</span>';
+      html += '</div></div>';
     } else {
       html += '<p class="err">' + I18n.t('doorNotValidToday') + '</p>';
     }
@@ -38,7 +55,7 @@
     $('loading').hidden = true;
 
     var btn = $('btnDoor');
-    if (btn) {
+    if (btn && !btn.disabled) {
       btn.onclick = function () {
         $('ok').hidden = true;
         $('err').hidden = true;

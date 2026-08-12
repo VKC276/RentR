@@ -1,6 +1,6 @@
 # GitHub Pages — RentR
 
-Live site: **http://ledinfo.vastervikclimbing.se/RentR/**
+Live site: **https://rent.vastervikclimbing.se/**
 
 ## Structure
 
@@ -17,7 +17,7 @@ Sätt (eller behåll):
 
 | key | value |
 |-----|-------|
-| `pagesBaseUrl` | `http://ledinfo.vastervikclimbing.se/RentR` |
+| `pagesBaseUrl` | `https://rent.vastervikclimbing.se` |
 
 Ingen trailing slash. Mejllänkar byggs som `{pagesBaseUrl}/booking.html?t=…` m.m.
 
