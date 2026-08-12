@@ -432,6 +432,10 @@
     html += '</p>';
     html += '<p class="detail-guest"><strong>' + escapeHtml(b.firstName + ' ' + b.lastName) + '</strong></p>';
     html += '<p class="muted">' + escapeHtml(b.phone) + ' · ' + escapeHtml(b.email) + '</p>';
+    html += '<div class="actions" style="margin-top:0.75rem;">';
+    html += '<button type="button" id="actResendMail">Skicka magisk länk igen</button>';
+    html += '</div>';
+    html += '<p class="ok" id="mailOk" hidden></p>';
     html += '<dl class="detail-facts">';
     html += '<div><dt>Utrustning</dt><dd>' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ') || '—') + '</dd></div>';
     html += '<div><dt>Period</dt><dd>' + b.startDate + ' – ' + b.endDate + ' <span class="muted">(' + b.days + ' dygn)</span></dd></div>';
@@ -488,12 +492,6 @@
       html += '<div id="editPadsBox" hidden></div>';
     }
 
-    html += '<section class="detail-section">';
-    html += '<h3>Mejl</h3>';
-    html += '<p class="detail-section-lead muted">Skicka bokningsmejlet till gästen igen (samma språk som bokningen).</p>';
-    html += '<div class="actions"><button type="button" class="ghost" id="actResendMail">Skicka mejl igen</button></div>';
-    html += '</section>';
-
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
 
@@ -501,10 +499,18 @@
     // would overwrite it, leaving the server with nothing to dispatch on.
     function act(op, extra, btn) {
       var payload = Object.assign({ op: op, bookingId: b.id }, extra || {});
-      api('adminUpdateBooking', payload, btn).then(function () {
-        return loadBookings();
-      }).then(function () {
-        openDetail(b.id);
+      api('adminUpdateBooking', payload, btn).then(function (res) {
+        if (op === 'resendMail') {
+          var ok = $('mailOk');
+          if (ok) {
+            ok.hidden = false;
+            ok.textContent = 'Mejl med magisk länk skickat till ' + (res.mailTo || b.email) + '.';
+          }
+          return;
+        }
+        return loadBookings().then(function () {
+          openDetail(b.id);
+        });
       }).catch(function (e) {
         $('detailErr').hidden = false;
         $('detailErr').textContent = e.message;
