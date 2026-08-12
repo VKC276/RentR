@@ -6,7 +6,7 @@
 import { statusLabel } from './util.js';
 import { getConfigMap } from './config.js';
 
-const APP_NAME = 'RentR';
+const APP_NAME = 'VKK Rental';
 
 const MAIL_I18N = {
   sv: {

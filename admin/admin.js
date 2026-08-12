@@ -646,7 +646,8 @@
           '<div><label for="edEnd">Till</label><input id="edEnd" type="date" value="' +
           escapeHtml(b.endDate) + '" /></div>' +
           '</div>' +
-          '<div class="actions"><button type="button" id="actSaveDates">Spara datum</button></div>'
+          '<div class="actions"><button type="button" id="actSaveDates">Spara datum</button></div>' +
+          '<p class="err" id="edErr" hidden></p>'
       });
       html += accordion({
         title: 'Ändra utrustning',
@@ -682,9 +683,24 @@
 
     // 'op', not 'action': Api.call reserves 'action' for the route name and
     // would overwrite it, leaving the server with nothing to dispatch on.
-    function act(op, extra, btn) {
+    function showNearErr(errId, message) {
+      var el = errId && $(errId);
+      if (!el) {
+        el = $('detailErr');
+      }
+      if (!el) return;
+      el.hidden = !message;
+      el.textContent = message || '';
+      if (message && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+
+    function act(op, extra, btn, errId) {
       var payload = Object.assign({ op: op, bookingId: b.id }, extra || {});
       var busy = op === 'resendMail' ? 'Skickar magisk länk…' : null;
+      if (errId) showNearErr(errId, '');
+      else if ($('detailErr')) $('detailErr').hidden = true;
       api('adminUpdateBooking', payload, btn, busy).then(function (res) {
         if (op === 'resendMail') {
           var ok = $('mailOk');
@@ -698,8 +714,7 @@
           openDetail(b.id);
         });
       }).catch(function (e) {
-        $('detailErr').hidden = false;
-        $('detailErr').textContent = e.message;
+        showNearErr(errId, e.message);
       });
     }
 
@@ -831,16 +846,14 @@
         var endDate = $('edEnd').value;
         var btn = $('actSaveDates');
         if (!startDate || !endDate) {
-          $('detailErr').hidden = false;
-          $('detailErr').textContent = 'Ange både start- och slutdatum.';
+          showNearErr('edErr', 'Ange både start- och slutdatum.');
           return;
         }
         if (startDate > endDate) {
-          $('detailErr').hidden = false;
-          $('detailErr').textContent = 'Startdatum måste vara före eller samma som slutdatum.';
+          showNearErr('edErr', 'Startdatum måste vara före eller samma som slutdatum.');
           return;
         }
-        $('detailErr').hidden = true;
+        showNearErr('edErr', '');
         api('availablePadsForBooking', {
           bookingId: b.id,
           startDate: startDate,
@@ -852,17 +865,17 @@
             return selected[String(p.id)] && !p.available;
           });
           if (conflicts.length) {
-            $('detailErr').hidden = false;
-            $('detailErr').textContent =
+            showNearErr(
+              'edErr',
               'Kan inte spara — vald utrustning är upptagen på nya datumen: ' +
-              conflicts.map(function (p) { return p.name; }).join(', ') +
-              '. Byt utrustning eller välj andra datum.';
+                conflicts.map(function (p) { return p.name; }).join(', ') +
+                '. Byt utrustning eller välj andra datum.'
+            );
             return;
           }
-          return act('setDates', { startDate: startDate, endDate: endDate }, btn);
+          return act('setDates', { startDate: startDate, endDate: endDate }, btn, 'edErr');
         }).catch(function (e) {
-          $('detailErr').hidden = false;
-          $('detailErr').textContent = e.message;
+          showNearErr('edErr', e.message);
         });
       };
     }
@@ -902,7 +915,8 @@
             '<p><strong>Ändra utrustning</strong></p>' +
             '<p class="muted">Bocka för ledig utrustning. Upptagen utrustning kan inte väljas. Sparande stoppas om något valt är i konflikt.</p>' +
             '<div class="pad-picks">' + rows + '</div>' +
-            '<div class="actions"><button type="button" id="epSave">Spara utrustning</button></div>';
+            '<div class="actions"><button type="button" id="epSave">Spara utrustning</button></div>' +
+            '<p class="err" id="epErr" hidden></p>';
           $('epSave').onclick = function () {
             var ids = [];
             var conflictNames = [];
@@ -912,19 +926,19 @@
               if (p && !p.available) conflictNames.push(p.name);
             });
             if (!ids.length) {
-              $('detailErr').hidden = false;
-              $('detailErr').textContent = 'Välj minst en utrustning.';
+              showNearErr('epErr', 'Välj minst en utrustning.');
               return;
             }
             if (conflictNames.length) {
-              $('detailErr').hidden = false;
-              $('detailErr').textContent =
+              showNearErr(
+                'epErr',
                 'Kan inte spara — vald utrustning är i konflikt: ' +
-                conflictNames.join(', ') +
-                '. Avmarkera den och välj ledig utrustning.';
+                  conflictNames.join(', ') +
+                  '. Avmarkera den och välj ledig utrustning.'
+              );
               return;
             }
-            act('setPads', { padIds: ids }, $('epSave'));
+            act('setPads', { padIds: ids }, $('epSave'), 'epErr');
           };
         }).catch(function (e) {
           box.innerHTML = '<p class="err">' + escapeHtml(e.message) + '</p>';

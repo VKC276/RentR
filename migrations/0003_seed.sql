@@ -24,7 +24,7 @@ INSERT OR IGNORE INTO config (key, value) VALUES
   ('currency', 'SEK'),
   ('doorCommandTtlSec', '30'),
   ('relayPulseMs', '1000'),
-  ('appName', 'RentR'),
+  ('appName', 'VKK Rental'),
   ('timezone', 'Europe/Stockholm'),
   ('pagesBaseUrl', 'https://rent.vastervikclimbing.se'),
   ('sessionHours', '0'),

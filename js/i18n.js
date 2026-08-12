@@ -1,7 +1,7 @@
 (function (global) {
   var STR = {
     sv: {
-      appName: 'RentR',
+      appName: 'VKK Rental',
       book: 'Boka',
       find: 'Hitta bokning',
       admin: 'Admin',
@@ -119,7 +119,7 @@
       busyRetry: 'Google svarade inte — försöker igen…'
     },
     en: {
-      appName: 'RentR',
+      appName: 'VKK Rental',
       book: 'Book',
       find: 'Find booking',
       admin: 'Admin',
@@ -237,7 +237,7 @@
       busyRetry: 'Google did not respond — retrying…'
     },
     de: {
-      appName: 'RentR',
+      appName: 'VKK Rental',
       book: 'Buchen',
       find: 'Buchung finden',
       admin: 'Admin',

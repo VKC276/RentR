@@ -2,7 +2,7 @@
   "name": "rentr",
   "version": "1.0.0",
   "private": true,
-  "description": "RentR — GitHub Pages UI + Cloudflare Worker/D1 API",
+  "description": "VKK Rental — GitHub Pages UI + Cloudflare Worker/D1 API",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

@@ -97,7 +97,7 @@ function testMailRelayInEditor() {
     secret: secret,
     messages: [{
       to: to,
-      subject: 'RentR test',
+      subject: 'VKK Rental test',
       body: 'Om du läser detta fungerar Gmail-relay från Apps Script.',
       html: '<p>Om du läser detta fungerar <strong>Gmail-relay</strong> från Apps Script.</p>'
     }]

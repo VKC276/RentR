@@ -1,5 +1,5 @@
 /**
- * RentR API — Cloudflare Worker + D1.
+ * VKK Rental API — Cloudflare Worker + D1.
  *
  * Same action JSON contract as the old Apps Script API. Double-booking is
  * rejected at submit time via UNIQUE(pad_id, day) locks inside an atomic batch.
