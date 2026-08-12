@@ -1031,7 +1031,7 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
 
   await logEvent(db, bookingId, action, actor.email, payload);
   const booking = await enrichBooking(db, bookingId);
-  if (action === 'approve' || action === 'reject' || action === 'handOut' || action === 'return') {
+  if (action === 'approve' || action === 'reject') {
     const magic = await createMagicToken(db, bookingId);
     const mailOpts =
       action === 'reject'

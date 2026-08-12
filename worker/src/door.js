@@ -15,7 +15,7 @@ import {
 } from './util.js';
 import { getConfigMap } from './config.js';
 import { enrichBooking, resolveMagicToken, logEvent, releasePadLocks } from './bookings.js';
-import { mailDoorPass, mailGuestStatus } from './mail.js';
+import { mailDoorPass } from './mail.js';
 
 const DEFAULT_START_HM = '06:00';
 const DEFAULT_END_HM = '22:00';
@@ -199,7 +199,6 @@ export async function confirmPickup(env, token, ctx) {
     .run();
   await logEvent(db, row.id, 'confirm_pickup', row.email, {});
   const booking = await enrichBooking(db, row.id);
-  kick(ctx, mailGuestStatus(env, booking, token));
   return { booking };
 }
 
@@ -231,7 +230,6 @@ export async function confirmReturn(env, token, ctx) {
   await releasePadLocks(db, row.id);
   await logEvent(db, row.id, 'confirm_return', row.email, {});
   const booking = await enrichBooking(db, row.id);
-  kick(ctx, mailGuestStatus(env, booking, token));
   return { booking };
 }
 
