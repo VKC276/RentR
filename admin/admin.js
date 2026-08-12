@@ -20,15 +20,20 @@
     HandedOut: 'Utlämnad',
     Returned: 'Återlämnad',
     Cancelled: 'Avbokad',
-    Rejected: 'Avslagen'
+    Rejected: 'Avslagen',
+    DoubleBooked: 'Dubbelbokat'
   };
 
   function statusLabel(status) {
     return STATUS_LABELS[status] || status;
   }
 
-  /** Only statuses a booking can still reach are worth filtering on. */
-  var FILTER_STATUSES = ['Requested', 'Approved', 'ChangePending', 'HandedOut', 'Returned', 'Cancelled', 'Rejected'];
+  /** DoubleBooked is computed, not stored — the filter sends that key to the API. */
+  var FILTER_STATUSES = ['DoubleBooked', 'Requested', 'Approved', 'ChangePending', 'HandedOut', 'Returned', 'Cancelled', 'Rejected'];
+
+  function displayStatus(b) {
+    return b.doubleBooked ? 'DoubleBooked' : b.status;
+  }
 
   var BUSY = {
     login: 'Loggar in…',
@@ -134,13 +139,15 @@
     bookings = list;
     var wrap = $('bookingsList');
     wrap.innerHTML = bookings.map(function (b) {
-      return '<button type="button" class="list-row booking" data-id="' + b.id + '">' +
+      var shown = displayStatus(b);
+      var badgeClass = b.doubleBooked ? ' badge-double' : '';
+      return '<button type="button" class="list-row booking' + (b.doubleBooked ? ' is-double' : '') + '" data-id="' + b.id + '">' +
         '<span class="r-no">' + escapeHtml(b.bookingNumber) + '</span>' +
         '<span class="r-guest">' + escapeHtml(b.firstName + ' ' + b.lastName) +
           '<span class="sub">' + escapeHtml(b.email) + '</span></span>' +
         '<span class="r-period">' + b.startDate + ' – ' + b.endDate +
           '<span class="sub">' + b.days + ' dygn</span></span>' +
-        '<span class="r-status"><span class="badge">' + escapeHtml(statusLabel(b.status)) + '</span></span>' +
+        '<span class="r-status"><span class="badge' + badgeClass + '">' + escapeHtml(statusLabel(shown)) + '</span></span>' +
         '<span class="r-price">' + b.priceTotal + ' SEK' +
           '<span class="sub"><span class="badge ' + (b.paid ? 'paid' : 'unpaid') + '">' +
           (b.paid ? 'Betald' : 'Obetald') + '</span></span></span>' +
@@ -205,7 +212,19 @@
     showModal('detailModal');
     $('detailTitle').textContent = b.bookingNumber;
     var html = '';
-    html += '<p><strong>' + b.bookingNumber + '</strong> — ' + escapeHtml(statusLabel(b.status)) + '</p>';
+    if (b.doubleBooked) {
+      html += '<p><span class="badge badge-double">Dubbelbokat</span> ' +
+        '<span class="muted">underliggande status: ' + escapeHtml(statusLabel(b.status)) + '</span></p>';
+      html += '<div class="conflict-box"><p><strong>Krockar med</strong></p><ul class="conflict-list">';
+      (b.conflicts || []).forEach(function (c) {
+        html += '<li><strong>' + escapeHtml(c.padName) + '</strong> — samma period som ' +
+          escapeHtml(c.otherNumber) + ' (' + escapeHtml(c.otherGuest) + ', ' +
+          c.otherStart + ' – ' + c.otherEnd + ', ' + escapeHtml(statusLabel(c.otherStatus)) + ')</li>';
+      });
+      html += '</ul><p class="muted">Byt till ledig utrustning nedan för att lösa krocken.</p></div>';
+    } else {
+      html += '<p><strong>' + b.bookingNumber + '</strong> — ' + escapeHtml(statusLabel(b.status)) + '</p>';
+    }
     html += '<p>' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' + escapeHtml(b.phone) + ' · ' + escapeHtml(b.email) + '</p>';
     html += '<p>Utrustning: ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
     html += '<p>' + b.startDate + ' – ' + b.endDate + ' (' + b.days + ' dygn inkl.)</p>';
@@ -226,8 +245,12 @@
       html += '<button type="button" id="actReturn">Återlämnad</button>';
     }
     html += '<button type="button" class="secondary" id="actPaid">' + (b.paid ? 'Markera obetald' : 'Betald') + '</button>';
+    if (['Returned', 'Cancelled', 'Rejected'].indexOf(b.status) < 0) {
+      html += '<button type="button" class="ghost" id="actEditPads">Ändra utrustning</button>';
+    }
     html += '</div>';
     html += '<div id="handOutBox" hidden style="margin-top:1rem;padding:1rem;border:1px solid var(--line);border-radius:12px;"></div>';
+    html += '<div id="editPadsBox" hidden style="margin-top:1rem;padding:1rem;border:1px solid var(--line);border-radius:12px;"></div>';
     html += '<p class="err" id="detailErr" hidden></p>';
     $('detail').innerHTML = html;
 
@@ -308,16 +331,70 @@
     onAct('actPaid', 'setPaid', { paid: !b.paid });
     autoSaveFlag('flagPickup', 'allowSelfPickup');
     autoSaveFlag('flagReturn', 'allowSelfReturn');
+
+    if ($('actEditPads')) {
+      $('actEditPads').onclick = function () {
+        var box = $('editPadsBox');
+        box.hidden = false;
+        box.innerHTML = '<p><strong>Ändra utrustning</strong></p><p id="epList">Laddar…</p>';
+        api('availablePadsForBooking', { bookingId: b.id }, $('actEditPads')).then(function (res) {
+          var pads = res.pads || [];
+          var assigned = {};
+          (b.padIds || []).forEach(function (id) { assigned[String(id)] = true; });
+          var rows = pads.map(function (p) {
+            var checked = assigned[String(p.id)] ? ' checked' : '';
+            var mark;
+            if (assigned[String(p.id)] && !p.available) {
+              mark = '<span class="badge badge-double">Dubbel</span>';
+            } else if (assigned[String(p.id)]) {
+              mark = '<span class="badge">Vald</span>';
+            } else if (p.available) {
+              mark = '<span class="badge paid">Ledig</span>';
+            } else {
+              mark = '<span class="badge unpaid">Upptagen</span>';
+            }
+            return '<label class="check pad-pick">' +
+              '<input type="checkbox" name="epPad" value="' + escapeHtml(p.id) + '"' + checked + '>' +
+              '<span>' + escapeHtml(p.name) + '</span> ' + mark +
+              '</label>';
+          }).join('');
+          box.innerHTML =
+            '<p><strong>Ändra utrustning</strong></p>' +
+            '<p class="muted">Bocka för den utrustning bokningen ska ha. Upptagen betyder att någon annan bokning redan håller den under perioden.</p>' +
+            '<div class="pad-picks">' + rows + '</div>' +
+            '<div class="actions"><button type="button" id="epSave">Spara utrustning</button></div>';
+          $('epSave').onclick = function () {
+            var ids = [];
+            box.querySelectorAll('input[name="epPad"]:checked').forEach(function (el) {
+              ids.push(el.value);
+            });
+            if (!ids.length) {
+              $('detailErr').hidden = false;
+              $('detailErr').textContent = 'Välj minst en utrustning.';
+              return;
+            }
+            act('setPads', { padIds: ids }, $('epSave'));
+          };
+        }).catch(function (e) {
+          box.innerHTML = '<p class="err">' + escapeHtml(e.message) + '</p>';
+        });
+      };
+      // Open the editor at once when the booking is double-booked — that is why
+      // the admin opened the card.
+      if (b.doubleBooked) $('actEditPads').click();
+    }
+
     if ($('actHandOut')) {
       $('actHandOut').onclick = function () {
         var box = $('handOutBox');
         box.hidden = false;
         box.innerHTML = '<p><strong>Lämna ut</strong></p><p id="hoPads">Laddar ledig utrustning…</p>';
         api('availablePadsForBooking', { bookingId: b.id }, $('actHandOut')).then(function (res) {
-          var pads = res.pads || [];
+          var pads = (res.pads || []).filter(function (p) { return p.available || p.assigned; });
           var opts = pads.map(function (p) {
             var sel = (b.padIds || [])[0] === p.id ? ' selected' : '';
-            return '<option value="' + p.id + '"' + sel + '>' + escapeHtml(p.name) + '</option>';
+            var tag = p.assigned ? '' : (p.available ? '' : ' (upptagen)');
+            return '<option value="' + p.id + '"' + sel + '>' + escapeHtml(p.name) + tag + '</option>';
           }).join('');
           box.innerHTML =
             '<p>Detaljer: ' + escapeHtml(b.firstName + ' ' + b.lastName) + ', ' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) +

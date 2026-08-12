@@ -1,6 +1,6 @@
 /**
- * Availability for date ranges, and the conflict check every write path runs
- * before it reserves equipment.
+ * Availability for the calendar, and helpers that find overlapping pads.
+ * Overlaps are allowed at booking time; admins see them as "Dubbelbokat".
  */
 
 /**
@@ -29,64 +29,30 @@ function parsePadIds_(value) {
 }
 
 /**
- * A check that says a pad is free is only worth anything if nobody can take it
- * between the answer and the write that acts on it. Two guests submitting the
- * same pad in the same second would otherwise both be told it was free, and
- * both get a booking, with neither of them seeing the collision message.
- *
- * The lock is script-wide: guests are anonymous, and what must not be handed
- * out twice is the equipment in the one shared spreadsheet.
- *
- * 15 seconds is chosen against the client's 30-second request timeout — long
- * enough to queue behind a few submissions, short enough that the wait plus the
- * writes still fit inside one request.
+ * Script-wide lock used only to keep nextBookingNumber_ unique when two
+ * submits land in the same second. Overlaps on equipment are allowed and
+ * surfaced to admins as "Dubbelbokat".
  */
 var PAD_LOCK_WAIT_MS = 15000;
 var padLockHeld_ = false;
 
 function withPadLock_(work) {
-  // A nested call must not take the lock again: the inner release would drop
-  // the outer guard while its writes were still to come. No path nests today,
-  // and this keeps it that way if one ever does.
   if (padLockHeld_) return work();
 
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(PAD_LOCK_WAIT_MS)) {
-    throw softError_('Systemet är upptaget just nu. Ingenting bokades — försök igen om en stund.', 503, 'systemBusy');
+    throw softError_('Systemet är upptaget just nu. Försök igen om en stund.', 503, 'systemBusy');
   }
   padLockHeld_ = true;
   try {
-    // Rows read before the lock describe the spreadsheet as it was before
-    // whoever we just waited for wrote theirs, so the check inside has to read
-    // the sheet again rather than answer from this request's memo.
     forgetTable_(SHEET_NAMES.Bookings);
     forgetTable_(SHEET_NAMES.BookingPads);
+    forgetTable_(SHEET_NAMES.Config);
     return work();
   } finally {
     padLockHeld_ = false;
     lock.releaseLock();
   }
-}
-
-/**
- * Nothing reserves equipment between picking it and sending the request, so
- * this is the only thing standing between two guests who chose the same pad.
- * Every caller must run it inside withPadLock_, before its first write.
- *
- * The unavailable pads travel to the client as data rather than as a finished
- * sentence: the guest pages are read in three languages and build their own.
- */
-function assertPadsAvailable_(padIds, startDate, endDate, ignoreBookingId) {
-  var taken = findUnavailablePadIds_(padIds, startDate, endDate, ignoreBookingId);
-  if (!taken.length) return;
-  var pads = describePads_(taken);
-  var names = pads.map(function (p) { return p.name; }).join(', ');
-  throw softError_(
-    'Inte längre ledig för valt intervall: ' + names,
-    409,
-    'padsUnavailable',
-    { unavailablePads: pads }
-  );
 }
 
 /** Ids of the requested pads that a blocking booking already occupies. */

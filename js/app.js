@@ -4,9 +4,6 @@
     startDate: '',
     endDate: '',
     selected: [],
-    // Pads the server refused on the last submit, kept so the message can be
-    // rebuilt when the guest switches language.
-    conflictPads: null,
     month: null,
     pads: [],
     // 'YYYY-MM-DD' -> { padIndex: true }, merged across every month loaded.
@@ -69,7 +66,6 @@
     $('payNote').textContent = I18n.t('payNote');
     $('thanksTitle').textContent = I18n.t('thanks');
     $('lblBookingNo').textContent = I18n.t('bookingNo');
-    renderConflict();
     renderCalendar();
     // The pad cards carry translated text too, and they are built by hand
     // rather than from a table of element ids.
@@ -139,12 +135,6 @@
   function scrollToEl(el) {
     var top = el.getBoundingClientRect().top + window.pageYOffset - 20;
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-  }
-
-  /** "A, B och C" — the last separator is a word, and words are translated. */
-  function joinNames(names) {
-    if (names.length < 2) return names.join('');
-    return names.slice(0, -1).join(', ') + ' ' + I18n.t('listAnd') + ' ' + names[names.length - 1];
   }
 
   function escapeHtml(s) {
@@ -329,7 +319,6 @@
   }
 
   function selectDate(date) {
-    hideConflict();
     if (!state.startDate || state.endDate || date < state.startDate) {
       state.startDate = date;
       state.endDate = '';
@@ -442,64 +431,6 @@
       '</div>' + priceRows(price);
   }
 
-  function renderConflict() {
-    var pads = state.conflictPads;
-    var box = $('conflictAlert');
-    if (!pads || !pads.length) {
-      box.hidden = true;
-      return;
-    }
-    var names = joinNames(pads.map(function (p) { return p.name || p.id; }));
-    $('conflictTitle').textContent = I18n.t('conflictTitle');
-    $('conflictText').textContent = I18n.t(pads.length === 1 ? 'conflictOne' : 'conflictMany', { pads: names });
-    $('conflictHint').textContent = I18n.t('conflictHint');
-    box.hidden = false;
-  }
-
-  function hideConflict() {
-    if (!state.conflictPads) return;
-    state.conflictPads = null;
-    renderConflict();
-  }
-
-  /**
-   * Throws away every cached copy of the calendar, on this machine and in the
-   * answer the server would otherwise repeat, so the booking that caused the
-   * collision is actually visible afterwards.
-   */
-  function reloadCalendarFresh() {
-    forgetStoredMonths();
-    state.blocked = {};
-    state.loadedMonths = {};
-    state.fetchedMonths = {};
-    return Promise.all([
-      loadMonth(state.month),
-      ensureMonths(state.startDate, state.endDate)
-    ]);
-  }
-
-  /**
-   * The guest asked for equipment somebody else got first. Nothing was booked,
-   * which the page has to say without any room for doubt, so the form goes away
-   * and an alert takes its place next to the choice that has to be made again.
-   */
-  function showConflict(pads) {
-    var keep = state.selected.slice();
-    state.conflictPads = pads;
-    renderConflict();
-    $('stepForm').hidden = true;
-    scrollToEl($('conflictAlert'));
-    $('conflictAlert').focus({ preventScroll: true });
-
-    Status.during(I18n.t('busyCalendar'), reloadCalendarFresh()).then(function () {
-      renderCalendar();
-      renderPads(padsForRange(state.startDate, state.endDate), keep);
-      updatePriceBox();
-    }).catch(function (err) {
-      showErr('errPads', err.message || I18n.t('error'));
-    });
-  }
-
   $('calendar').addEventListener('click', function (ev) {
     var cell = ev.target.closest('.cal-day');
     if (!cell || cell.classList.contains('blank') || cell.classList.contains('past')) return;
@@ -527,7 +458,6 @@
     state.startDate = '';
     state.endDate = '';
     state.selected = [];
-    hideConflict();
     $('btnClearDates').hidden = true;
     $('stepPads').hidden = true;
     $('stepForm').hidden = true;
@@ -535,11 +465,8 @@
     updateDateSummary();
   });
 
-  // Nothing is reserved here any more: the selection is only carried to the
-  // form, and the server has the last word when the request is sent.
   $('btnContinue').addEventListener('click', function () {
     showErr('errPads');
-    hideConflict();
     if (!state.selected.length) return;
     $('stepForm').hidden = false;
     updatePriceBox();
@@ -554,7 +481,6 @@
 
   $('btnSubmit').addEventListener('click', function () {
     showErr('errForm');
-    hideConflict();
     if (!state.selected.length || !state.startDate || !state.endDate) return;
     var payload = {
       padIds: state.selected.slice(),
@@ -582,20 +508,10 @@
       $('manageLink').href = res.manageUrl || ('booking.html?t=' + encodeURIComponent(res.magicToken));
       $('manageLink').textContent = I18n.t('manage');
     }).catch(function (err) {
-      var taken = err && err.code === 'padsUnavailable' && err.details && err.details.unavailablePads;
-      if (taken && taken.length) {
-        showConflict(taken);
-        return;
-      }
-      // Too many submissions at once. The selection is still good, so the form
-      // stays as it is and the guest only has to press again.
       if (err && err.code === 'systemBusy') {
         showErr('errForm', I18n.t('tryAgainSoon'));
         return;
       }
-      // We ran out of attempts while the server was still working, so the
-      // booking may exist. Telling the guest to press again would risk a
-      // duplicate; the confirmation mail is the reliable answer.
       if (err && (err.timedOut || err.code === 'stillWorking')) {
         showErr('errForm', I18n.t('slowSubmit'));
         return;

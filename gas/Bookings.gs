@@ -143,13 +143,12 @@ function computeOpenDoorFlags_(b) {
 }
 
 /**
- * Nothing is reserved while the guest fills in the form, so the selection is
- * only checked here — and it is all or nothing. Every line below the
- * availability check writes something the guest would have to be told about:
- * a booking number that would be skipped, rows that would make up half a
- * booking, a mail promising equipment somebody else has. So the check comes
- * first, under the lock that keeps its answer true until the rows exist, and a
- * conflict leaves the spreadsheet exactly as it was.
+ * A booking is just a request. Overlaps are allowed here and shown to admins as
+ * "Dubbelbokat" so they can reassign equipment — rejecting at submit time only
+ * made the guest wait behind a lock for a race that almost never happens.
+ *
+ * The lock still wraps the counter and the rows: nextBookingNumber_ is a
+ * read-modify-write, and two simultaneous submits must not share a number.
  */
 function submitBooking_(payload) {
   var padIds = parsePadIds_(payload.padIds);
@@ -168,21 +167,9 @@ function submitBooking_(payload) {
     throw softError_('Förnamn, efternamn, e-post och telefon krävs', 400);
   }
 
-  // Pure reads, and none of them touch what the lock protects. Pricing an
-  // inactive pad or an impossible range fails here, before anyone else has to
-  // queue behind us.
   var price = calculatePrice_(padIds, startDate, endDate);
 
-  // Only what has to be indivisible: the check, and the rows that make the pads
-  // taken. The moment the BookingPads rows exist, the next request's check sees
-  // them, so the lock can be handed on before the mails and the magic link.
   var created = withPadLock_(function () {
-    assertPadsAvailable_(padIds, startDate, endDate);
-
-    // ---- First write of the request. Nothing above it writes, and nothing
-    // below it runs on a conflict. The counter is in here too: it is a
-    // read-modify-write of its own, and two bookings at once could otherwise
-    // be handed the same number.
     var bookingNumber = nextBookingNumber_();
     var id = uid_();
     var now = nowIso_();
@@ -304,16 +291,9 @@ function guestRequestChange_(token, payload) {
   }
 
   if (padIds) {
-    // The same race as a new booking, with one twist: the dates decide what the
-    // pads block, so the pads and the dates have to land together or a check in
-    // between weighs the new pads against the old period.
-    withPadLock_(function () {
-      assertPadsAvailable_(padIds, payload.startDate, payload.endDate, b.id);
-      replaceBookingPads_(b.id, padIds);
-      updateObjectById_(SHEET_NAMES.Bookings, b.id, patch);
-    });
+    replaceBookingPads_(b.id, padIds);
+    updateObjectById_(SHEET_NAMES.Bookings, b.id, patch);
   } else {
-    // Nothing here changes what the booking occupies, so it needs no lock.
     updateObjectById_(SHEET_NAMES.Bookings, b.id, patch);
   }
 
@@ -360,26 +340,87 @@ function guestCancelBooking_(token) {
 }
 
 function listBookingsAdmin_(query) {
-  var rows = readAllObjects_(SHEET_NAMES.Bookings);
+  var all = readAllObjects_(SHEET_NAMES.Bookings);
   var number = query && query.bookingNumber ? String(query.bookingNumber).trim().toLowerCase() : '';
   var status = query && query.status ? String(query.status) : '';
+  var doubleOnly = status === 'DoubleBooked';
 
-  // Filter first: resolving pads and door flags for rows that are about to be
-  // discarded is most of the work on a filtered view.
+  // Conflicts are weighed against every blocking booking, not just the filtered
+  // view — otherwise a Requested row would miss its clash with an Approved one.
+  var index = bookingIndex_();
+  var conflicts = computeConflicts_(all, index);
+
+  var rows = all;
   if (number) {
     rows = rows.filter(function (b) {
       return String(b.bookingNumber).toLowerCase().indexOf(number) >= 0;
     });
   }
-  if (status) {
+  if (status && !doubleOnly) {
     rows = rows.filter(function (b) { return b.status === status; });
   }
   rows.sort(function (a, b) {
     return String(b.createdAt).localeCompare(String(a.createdAt));
   });
 
-  var index = bookingIndex_();
-  return rows.map(function (b) { return enrichBooking_(b, index); });
+  var list = rows.map(function (b) {
+    var e = enrichBooking_(b, index);
+    e.conflicts = conflicts[b.id] || [];
+    e.doubleBooked = e.conflicts.length > 0;
+    return e;
+  });
+  if (doubleOnly) {
+    list = list.filter(function (b) { return b.doubleBooked; });
+  }
+  return list;
+}
+
+/**
+ * Shared pads on overlapping dates among bookings that still occupy equipment.
+ * The stored status stays Requested/Approved/… — "Dubbelbokat" is only how the
+ * admin UI labels the computed flag.
+ */
+function computeConflicts_(rows, index) {
+  var blocking = rows.filter(function (b) { return BLOCKING_STATUSES[b.status]; });
+  var out = {};
+  blocking.forEach(function (b) { out[b.id] = []; });
+
+  for (var i = 0; i < blocking.length; i++) {
+    for (var j = i + 1; j < blocking.length; j++) {
+      var a = blocking[i];
+      var b = blocking[j];
+      if (!datesOverlap_(a.startDate, a.endDate, b.startDate, b.endDate)) continue;
+      var padsA = index.padsByBooking[a.id] || [];
+      var padsB = index.padsByBooking[b.id] || [];
+      var shared = padsA.filter(function (id) { return padsB.indexOf(id) >= 0; });
+      if (!shared.length) continue;
+      shared.forEach(function (padId) {
+        var pad = index.padMap[padId];
+        var name = pad ? pad.name : padId;
+        out[a.id].push({
+          padId: padId,
+          padName: name,
+          otherId: b.id,
+          otherNumber: b.bookingNumber,
+          otherGuest: (b.firstName + ' ' + b.lastName).trim(),
+          otherStart: b.startDate,
+          otherEnd: b.endDate,
+          otherStatus: b.status
+        });
+        out[b.id].push({
+          padId: padId,
+          padName: name,
+          otherId: a.id,
+          otherNumber: a.bookingNumber,
+          otherGuest: (a.firstName + ' ' + a.lastName).trim(),
+          otherStart: a.startDate,
+          otherEnd: a.endDate,
+          otherStatus: a.status
+        });
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -423,20 +464,25 @@ function adminUpdateBooking_(bookingId, payload, actor) {
     if (payload.padId) {
       var newPad = String(payload.padId);
       var price = calculatePrice_([newPad], b.startDate, b.endDate);
-      // Swapping a pad in allocates it exactly as a new booking does, and a
-      // guest may be submitting the same one right now. The period is not
-      // changing here, so the row that decides it is already right and only the
-      // pads have to be indivisible.
-      withPadLock_(function () {
-        assertPadsAvailable_([newPad], b.startDate, b.endDate, b.id);
-        replaceBookingPads_(b.id, [newPad]);
-      });
+      replaceBookingPads_(b.id, [newPad]);
       patch.priceBase = price.priceBase;
       patch.priceDiscount = price.priceDiscount;
       patch.priceTotal = price.priceTotal;
       patch.priceBreakdownJson = JSON.stringify(price);
     }
     patch.status = 'HandedOut';
+  } else if (action === 'setPads') {
+    var nextPads = parsePadIds_(payload.padIds);
+    if (!nextPads.length) throw softError_('Välj minst en utrustning', 400);
+    if (['Returned', 'Cancelled', 'Rejected'].indexOf(b.status) >= 0) {
+      throw softError_('Utrustningen kan inte ändras i status ' + b.status, 400);
+    }
+    var nextPrice = calculatePrice_(nextPads, b.startDate, b.endDate);
+    replaceBookingPads_(b.id, nextPads);
+    patch.priceBase = nextPrice.priceBase;
+    patch.priceDiscount = nextPrice.priceDiscount;
+    patch.priceTotal = nextPrice.priceTotal;
+    patch.priceBreakdownJson = JSON.stringify(nextPrice);
   } else if (action === 'return') {
     patch.status = 'Returned';
     patch.doorOpenedForReturn = false;
@@ -468,11 +514,29 @@ function adminUpdateBooking_(bookingId, payload, actor) {
 function availablePadsForBooking_(bookingId) {
   var b = findById_(SHEET_NAMES.Bookings, bookingId);
   if (!b) throw softError_('Bokning saknas', 404);
-  var avail = getAvailability_(b.startDate, b.endDate);
-  // include currently assigned pads as available for swap
   var current = getBookingPads_(bookingId);
-  avail.pads.forEach(function (p) {
-    if (current.indexOf(p.id) >= 0) p.available = true;
+  var assigned = {};
+  current.forEach(function (id) { assigned[String(id)] = true; });
+
+  // Ignore this booking so its own pads are not marked "taken by itself".
+  // What remains taken is a real overlap with somebody else.
+  var taken = {};
+  findUnavailablePadIds_(
+    activePads_().map(function (p) { return String(p.id); }),
+    b.startDate,
+    b.endDate,
+    bookingId
+  ).forEach(function (id) { taken[String(id)] = true; });
+
+  return activePads_().map(function (p) {
+    var id = String(p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      pricePerDay: p.pricePerDay,
+      assigned: !!assigned[id],
+      available: !taken[id]
+    };
   });
-  return avail.pads.filter(function (p) { return p.available; });
 }
