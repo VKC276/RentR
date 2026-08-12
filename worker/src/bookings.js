@@ -11,6 +11,8 @@ import {
   BLOCKING_STATUSES,
   statusLabel,
   kick,
+  normalizeHm,
+  isWithinHmWindow,
 } from './util.js';
 import { calculatePrice } from './pricing.js';
 import { getConfigMap, closedBookingRetentionMonths, CLOSED_BOOKING_STATUSES } from './config.js';
@@ -34,8 +36,13 @@ const BOOKING_SELECT = `
          door_opened_for_return AS doorOpenedForReturn,
          door_opened_for_pickup AS doorOpenedForPickup, notes,
          reject_reason AS rejectReason,
+         self_service_start_time AS selfServiceStartTime,
+         self_service_end_time AS selfServiceEndTime,
          created_at AS createdAt, updated_at AS updatedAt
   FROM bookings`;
+
+const DEFAULT_SELF_START = '06:00';
+const DEFAULT_SELF_END = '22:00';
 
 async function nextBookingNumber(db) {
   await db.prepare(`UPDATE counters SET value = value + 1 WHERE key = 'bookingNumber'`).run();
@@ -102,60 +109,176 @@ export function computeOpenDoorFlags(b) {
   const endDate = String(b.endDate || b.end_date || '');
   const doorOpenedReturn = !!(b.doorOpenedForReturn || b.door_opened_for_return);
   const doorOpenedPickup = !!(b.doorOpenedForPickup || b.door_opened_for_pickup);
+  const startTime = normalizeHm(
+    b.selfServiceStartTime || b.self_service_start_time,
+    DEFAULT_SELF_START
+  );
+  const endTime = normalizeHm(
+    b.selfServiceEndTime || b.self_service_end_time,
+    DEFAULT_SELF_END
+  );
+  const withinHours = isWithinHmWindow(startTime, endTime);
 
   function pickupSection() {
     if (!allowPickup) {
-      return { phase: 'notAllowed', date: startDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'notAllowed',
+        date: startDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (status === 'HandedOut' || status === 'Returned') {
-      return { phase: 'done', date: startDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'done',
+        date: startDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (status !== 'Approved') {
-      return { phase: 'notAllowed', date: startDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'notAllowed',
+        date: startDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (startDate > today) {
-      return { phase: 'upcoming', date: startDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'upcoming',
+        date: startDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (startDate === today) {
+      if (!withinHours) {
+        return {
+          phase: 'outsideHours',
+          date: startDate,
+          startTime,
+          endTime,
+          showOpenDoor: false,
+          showConfirm: false,
+        };
+      }
       return {
         phase: doorOpenedPickup ? 'confirm' : 'active',
         date: startDate,
+        startTime,
+        endTime,
         showOpenDoor: true,
         showConfirm: doorOpenedPickup,
       };
     }
-    return { phase: 'passed', date: startDate, showOpenDoor: false, showConfirm: false };
+    return {
+      phase: 'passed',
+      date: startDate,
+      startTime,
+      endTime,
+      showOpenDoor: false,
+      showConfirm: false,
+    };
   }
 
   function returnSection() {
     if (!allowReturn) {
-      return { phase: 'notAllowed', date: endDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'notAllowed',
+        date: endDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (status === 'Returned') {
-      return { phase: 'done', date: endDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'done',
+        date: endDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (status !== 'HandedOut') {
-      // Allowed later, but not openable until handed out — still show activation date.
       if (endDate && endDate >= today) {
-        return { phase: 'upcoming', date: endDate, showOpenDoor: false, showConfirm: false };
+        return {
+          phase: 'upcoming',
+          date: endDate,
+          startTime,
+          endTime,
+          showOpenDoor: false,
+          showConfirm: false,
+        };
       }
       if (endDate && endDate < today) {
-        return { phase: 'passed', date: endDate, showOpenDoor: false, showConfirm: false };
+        return {
+          phase: 'passed',
+          date: endDate,
+          startTime,
+          endTime,
+          showOpenDoor: false,
+          showConfirm: false,
+        };
       }
-      return { phase: 'notAllowed', date: endDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'notAllowed',
+        date: endDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (endDate > today) {
-      return { phase: 'upcoming', date: endDate, showOpenDoor: false, showConfirm: false };
+      return {
+        phase: 'upcoming',
+        date: endDate,
+        startTime,
+        endTime,
+        showOpenDoor: false,
+        showConfirm: false,
+      };
     }
     if (endDate === today) {
+      if (!withinHours) {
+        return {
+          phase: 'outsideHours',
+          date: endDate,
+          startTime,
+          endTime,
+          showOpenDoor: false,
+          showConfirm: false,
+        };
+      }
       return {
         phase: doorOpenedReturn ? 'confirm' : 'active',
         date: endDate,
+        startTime,
+        endTime,
         showOpenDoor: true,
         showConfirm: doorOpenedReturn,
       };
     }
-    return { phase: 'passed', date: endDate, showOpenDoor: false, showConfirm: false };
+    return {
+      phase: 'passed',
+      date: endDate,
+      startTime,
+      endTime,
+      showOpenDoor: false,
+      showConfirm: false,
+    };
   }
 
   const pickup = pickupSection();
@@ -173,6 +296,8 @@ export function computeOpenDoorFlags(b) {
     activeDate: mode === 'return' ? endDate : startDate,
     startDate,
     endDate,
+    startTime,
+    endTime,
     allowPickup,
     allowReturn,
     pickup,
@@ -269,6 +394,14 @@ export async function enrichBooking(db, id) {
     paid: !!b.paid,
     doorOpenedForReturn: !!b.doorOpenedForReturn,
     doorOpenedForPickup: !!b.doorOpenedForPickup,
+    selfServiceStartTime: normalizeHm(
+      b.selfServiceStartTime || b.self_service_start_time,
+      DEFAULT_SELF_START
+    ),
+    selfServiceEndTime: normalizeHm(
+      b.selfServiceEndTime || b.self_service_end_time,
+      DEFAULT_SELF_END
+    ),
     priceTotal,
     priceOverride: hasOverride ? b.priceOverride : null,
     padIds: pads.map((p) => p.id),
@@ -318,6 +451,14 @@ function enrichFromRow(b, index) {
     priceBreakdownJson: b.priceBreakdownJson || '',
     doorOpenedForReturn: !!b.doorOpenedForReturn,
     doorOpenedForPickup: !!b.doorOpenedForPickup,
+    selfServiceStartTime: normalizeHm(
+      b.selfServiceStartTime || b.self_service_start_time,
+      DEFAULT_SELF_START
+    ),
+    selfServiceEndTime: normalizeHm(
+      b.selfServiceEndTime || b.self_service_end_time,
+      DEFAULT_SELF_END
+    ),
     notes: b.notes || '',
     rejectReason: b.rejectReason || '',
     createdAt: b.createdAt,
@@ -411,8 +552,9 @@ export async function submitBooking(env, payload, ctx) {
           start_date, end_date, days, locale, status,
           allow_self_pickup, allow_self_return, paid, paid_at,
           price_base, price_discount, price_total, price_override, price_breakdown_json,
-          door_opened_for_return, notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Requested', 0, 0, 0, NULL, ?, ?, ?, NULL, ?, 0, ?, ?, ?)`
+          door_opened_for_return, notes, self_service_start_time, self_service_end_time,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Requested', 0, 0, 0, NULL, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -430,6 +572,8 @@ export async function submitBooking(env, payload, ctx) {
         price.priceTotal,
         JSON.stringify(price),
         String(payload.notes || ''),
+        DEFAULT_SELF_START,
+        DEFAULT_SELF_END,
         now,
         now
       ),
@@ -846,11 +990,20 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
           ? 1
           : 0
         : b.allow_self_return;
+    const startTime =
+      typeof payload.selfServiceStartTime !== 'undefined'
+        ? normalizeHm(payload.selfServiceStartTime, DEFAULT_SELF_START)
+        : normalizeHm(b.self_service_start_time, DEFAULT_SELF_START);
+    const endTime =
+      typeof payload.selfServiceEndTime !== 'undefined'
+        ? normalizeHm(payload.selfServiceEndTime, DEFAULT_SELF_END)
+        : normalizeHm(b.self_service_end_time, DEFAULT_SELF_END);
     await db
       .prepare(
-        `UPDATE bookings SET allow_self_pickup = ?, allow_self_return = ?, updated_at = ? WHERE id = ?`
+        `UPDATE bookings SET allow_self_pickup = ?, allow_self_return = ?,
+         self_service_start_time = ?, self_service_end_time = ?, updated_at = ? WHERE id = ?`
       )
-      .bind(pickup, ret, now, bookingId)
+      .bind(pickup, ret, startTime, endTime, now, bookingId)
       .run();
   } else if (action === 'setPriceOverride') {
     const ov =

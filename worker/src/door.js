@@ -10,10 +10,15 @@ import {
   todayYmd,
   calcDays,
   kick,
+  normalizeHm,
+  isWithinHmWindow,
 } from './util.js';
 import { getConfigMap } from './config.js';
 import { enrichBooking, resolveMagicToken, logEvent, releasePadLocks } from './bookings.js';
 import { mailDoorPass, mailGuestStatus } from './mail.js';
+
+const DEFAULT_START_HM = '06:00';
+const DEFAULT_END_HM = '22:00';
 
 function requirePiKey(env, apiKey) {
   const expected = env.DOOR_API_KEY;
@@ -26,26 +31,42 @@ function doorPassUrl(pagesBaseUrl, token) {
   return (pagesBaseUrl || '').replace(/\/$/, '') + '/door.html?t=' + encodeURIComponent(token);
 }
 
+function passTimes(pass) {
+  return {
+    startTime: normalizeHm(pass.start_time || pass.startTime, DEFAULT_START_HM),
+    endTime: normalizeHm(pass.end_time || pass.endTime, DEFAULT_END_HM),
+  };
+}
+
 export async function findDoorPassByToken(db, token) {
   if (!token) return null;
   return db.prepare(`SELECT * FROM door_passes WHERE token = ?`).bind(token).first();
 }
 
-function isDoorPassValidToday(pass) {
+function isDoorPassValidDate(pass) {
   if (!pass || pass.revoked) return false;
   const today = todayYmd();
   return today >= pass.start_date && today <= pass.end_date;
+}
+
+function isDoorPassValidNow(pass) {
+  if (!isDoorPassValidDate(pass)) return false;
+  const { startTime, endTime } = passTimes(pass);
+  return isWithinHmWindow(startTime, endTime);
 }
 
 export function enrichDoorPass(pass) {
   if (!pass) return null;
   const startDate = pass.start_date || pass.startDate;
   const endDate = pass.end_date || pass.endDate;
+  const { startTime, endTime } = passTimes(pass);
   const today = todayYmd();
-  const valid = isDoorPassValidToday(pass);
+  const dateOk = isDoorPassValidDate(pass);
+  const valid = isDoorPassValidNow(pass);
   let doorState = 'passed';
   if (pass.revoked) doorState = 'revoked';
   else if (valid) doorState = 'active';
+  else if (dateOk) doorState = 'outsideHours';
   else if (today < String(startDate)) doorState = 'upcoming';
 
   return {
@@ -54,6 +75,8 @@ export function enrichDoorPass(pass) {
     recipientEmail: pass.recipient_email || pass.recipientEmail,
     startDate,
     endDate,
+    startTime,
+    endTime,
     locale: pass.locale || 'sv',
     revoked: !!pass.revoked,
     showOpenDoor: valid,
@@ -88,7 +111,16 @@ export async function openDoor(env, token) {
   const booking = await enrichBooking(db, t.booking_id);
   if (!booking) throw softError('Bokning saknas', 404);
   const flags = booking.openDoor;
-  if (!flags.showOpenDoor) throw softError('Open door är inte tillgänglig', 403);
+  if (!flags.showOpenDoor) {
+    const section = flags.mode === 'return' ? flags.return : flags.pickup;
+    if (section && section.phase === 'outsideHours') {
+      throw softError(
+        'Open door gäller kl ' + section.startTime + '–' + section.endTime,
+        403
+      );
+    }
+    throw softError('Open door är inte tillgänglig', 403);
+  }
 
   const cfg = await getConfigMap(db);
   const ttl = Number(cfg.doorCommandTtlSec || 30);
@@ -118,11 +150,15 @@ export async function openDoor(env, token) {
 async function openDoorFromPass(env, passRow) {
   const db = env.DB;
   if (passRow.revoked) throw softError('Länken är återkallad', 403);
-  if (!isDoorPassValidToday(passRow)) {
+  if (!isDoorPassValidDate(passRow)) {
     throw softError(
       'Open door gäller endast ' + passRow.start_date + ' – ' + passRow.end_date,
       403
     );
+  }
+  if (!isDoorPassValidNow(passRow)) {
+    const { startTime, endTime } = passTimes(passRow);
+    throw softError('Open door gäller kl ' + startTime + '–' + endTime, 403);
   }
   const cfg = await getConfigMap(db);
   const ttl = Number(cfg.doorCommandTtlSec || 30);
@@ -147,6 +183,11 @@ export async function confirmPickup(env, token, ctx) {
   if (row.status !== 'Approved') throw softError('Kan inte bekräfta utlämning i denna status', 400);
   if (String(row.start_date) !== todayYmd()) {
     throw softError('Utlämning kan bara bekräftas på startdagen', 400);
+  }
+  const pickupStart = normalizeHm(row.self_service_start_time, DEFAULT_START_HM);
+  const pickupEnd = normalizeHm(row.self_service_end_time, DEFAULT_END_HM);
+  if (!isWithinHmWindow(pickupStart, pickupEnd)) {
+    throw softError('Bekräftelse gäller kl ' + pickupStart + '–' + pickupEnd, 400);
   }
 
   const now = nowIso();
@@ -173,6 +214,11 @@ export async function confirmReturn(env, token, ctx) {
   if (row.status !== 'HandedOut') throw softError('Kan inte bekräfta återlämning i denna status', 400);
   if (String(row.end_date) !== todayYmd()) {
     throw softError('Återlämning kan bara bekräftas på slutdagen', 400);
+  }
+  const returnStart = normalizeHm(row.self_service_start_time, DEFAULT_START_HM);
+  const returnEnd = normalizeHm(row.self_service_end_time, DEFAULT_END_HM);
+  if (!isWithinHmWindow(returnStart, returnEnd)) {
+    throw softError('Bekräftelse gäller kl ' + returnStart + '–' + returnEnd, 400);
   }
 
   const now = nowIso();
@@ -248,6 +294,8 @@ export async function createAndSendDoorPass(env, payload, actor, ctx) {
   const email = String(payload.recipientEmail || '').trim().toLowerCase();
   const startDate = String(payload.startDate || '').trim();
   const endDate = String(payload.endDate || '').trim();
+  const startTime = normalizeHm(payload.startTime, DEFAULT_START_HM);
+  const endTime = normalizeHm(payload.endTime, DEFAULT_END_HM);
   const locale = ['sv', 'en', 'de'].includes(payload.locale) ? payload.locale : 'sv';
 
   if (!name || !email || !startDate || !endDate) {
@@ -261,10 +309,11 @@ export async function createAndSendDoorPass(env, payload, actor, ctx) {
   await db
     .prepare(
       `INSERT INTO door_passes
-       (id, token, recipient_name, recipient_email, start_date, end_date, locale, revoked, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+       (id, token, recipient_name, recipient_email, start_date, end_date, start_time, end_time,
+        locale, revoked, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
     )
-    .bind(id, token, name, email, startDate, endDate, locale, actor.email || '', now)
+    .bind(id, token, name, email, startDate, endDate, startTime, endTime, locale, actor.email || '', now)
     .run();
 
   const row = await db.prepare(`SELECT * FROM door_passes WHERE id = ?`).bind(id).first();

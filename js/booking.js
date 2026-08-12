@@ -26,6 +26,9 @@
 
     var phase = section && section.phase ? section.phase : 'notAllowed';
     var date = (section && section.date) || '';
+    var startTime = (section && section.startTime) || '06:00';
+    var endTime = (section && section.endTime) || '22:00';
+    var hoursLabel = I18n.t('selfServiceHours', { start: startTime, end: endTime });
 
     if (phase === 'notAllowed') {
       html += '<p class="muted">' + escapeHtml(I18n.t('selfServiceNotAvailable')) + '</p>';
@@ -35,6 +38,12 @@
           ? I18n.t('selfServicePickupActivates', { date: date })
           : I18n.t('selfServiceReturnActivates', { date: date })
       ) + '</p>';
+      html += '<p class="muted">' + escapeHtml(hoursLabel) + '</p>';
+    } else if (phase === 'outsideHours') {
+      html += '<p class="muted">' + escapeHtml(I18n.t('selfServiceOutsideHours', {
+        start: startTime,
+        end: endTime
+      })) + '</p>';
     } else if (phase === 'passed') {
       html += '<p class="muted">' + escapeHtml(
         kind === 'pickup'
@@ -48,6 +57,7 @@
           : I18n.t('doorStateReturned')
       ) + '</p>';
     } else if (phase === 'active' || phase === 'confirm') {
+      html += '<p class="muted">' + escapeHtml(hoursLabel) + '</p>';
       html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepOpen')) + '</p>';
       html += '<div class="door-row">';
       html += '<button type="button" id="btnDoor' + (kind === 'pickup' ? 'Pickup' : 'Return') + '">' +

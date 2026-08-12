@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS bookings (
   price_breakdown_json TEXT NOT NULL DEFAULT '',
   door_opened_for_return INTEGER NOT NULL DEFAULT 0,
   notes TEXT NOT NULL DEFAULT '',
+  self_service_start_time TEXT NOT NULL DEFAULT '06:00',
+  self_service_end_time TEXT NOT NULL DEFAULT '22:00',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -108,6 +110,8 @@ CREATE TABLE IF NOT EXISTS door_passes (
   recipient_email TEXT NOT NULL,
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
+  start_time TEXT NOT NULL DEFAULT '06:00',
+  end_time TEXT NOT NULL DEFAULT '22:00',
   locale TEXT NOT NULL DEFAULT 'sv',
   revoked INTEGER NOT NULL DEFAULT 0,
   created_by TEXT NOT NULL DEFAULT '',

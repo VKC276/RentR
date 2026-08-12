@@ -627,11 +627,23 @@
     html += accordion({
       title: 'Självbetjäning',
       open: false,
-      lead: 'Kunden öppnar dörren och bekräftar sedan utlämning respektive återlämning.',
+      lead: 'Kunden öppnar dörren och bekräftar sedan upphämtning respektive återlämning inom angivna klockslag.',
       body: '<div class="check-row">' +
         flagCheckbox('flagPickup', 'Tillåt egen hämtning', b.allowSelfPickup) +
         flagCheckbox('flagReturn', 'Tillåt egen återlämning', b.allowSelfReturn) +
-        '</div>'
+        '</div>' +
+        '<div class="row" style="margin-top:0.75rem;">' +
+        '<div><label for="ssStartTime">Öppen från</label>' +
+        '<input id="ssStartTime" type="time" value="' +
+        escapeHtml(b.selfServiceStartTime || '06:00') + '" /></div>' +
+        '<div><label for="ssEndTime">Öppen till</label>' +
+        '<input id="ssEndTime" type="time" value="' +
+        escapeHtml(b.selfServiceEndTime || '22:00') + '" /></div>' +
+        '</div>' +
+        '<div class="actions" style="margin-top:0.65rem;">' +
+        '<button type="button" class="ghost" id="actSaveSelfHours">Spara tider</button></div>' +
+        '<p class="ok" id="ssHoursOk" hidden></p>' +
+        '<p class="err" id="ssHoursErr" hidden></p>'
     });
 
     if (canEditPads) {
@@ -832,6 +844,39 @@
     }
     autoSaveFlag('flagPickup', 'allowSelfPickup');
     autoSaveFlag('flagReturn', 'allowSelfReturn');
+
+    if ($('actSaveSelfHours')) {
+      $('actSaveSelfHours').onclick = function () {
+        var ok = $('ssHoursOk');
+        var err = $('ssHoursErr');
+        if (ok) ok.hidden = true;
+        if (err) err.hidden = true;
+        var startTime = $('ssStartTime').value || '06:00';
+        var endTime = $('ssEndTime').value || '22:00';
+        api('adminUpdateBooking', {
+          op: 'setFlags',
+          bookingId: b.id,
+          allowSelfPickup: !!($('flagPickup') && $('flagPickup').checked),
+          allowSelfReturn: !!($('flagReturn') && $('flagReturn').checked),
+          selfServiceStartTime: startTime,
+          selfServiceEndTime: endTime
+        }, $('actSaveSelfHours')).then(function (res) {
+          if (res && res.booking) {
+            b.selfServiceStartTime = res.booking.selfServiceStartTime;
+            b.selfServiceEndTime = res.booking.selfServiceEndTime;
+          }
+          if (ok) {
+            ok.hidden = false;
+            ok.textContent = 'Tiderna är sparade.';
+          }
+        }).catch(function (e) {
+          if (err) {
+            err.hidden = false;
+            err.textContent = e.message;
+          }
+        });
+      };
+    }
 
     if ($('actSaveSchedule')) {
       var schedulePadById = {};
@@ -1191,7 +1236,9 @@
       return '<button type="button" class="list-row pass" data-pass="' + p.id + '">' +
         '<span class="r-who">' + escapeHtml(p.recipientName) +
           '<span class="sub">' + escapeHtml(p.recipientEmail) + '</span></span>' +
-        '<span class="r-period">' + p.startDate + ' – ' + p.endDate + '</span>' +
+        '<span class="r-period">' + p.startDate + ' – ' + p.endDate +
+          '<span class="sub">kl ' + escapeHtml(p.startTime || '06:00') + '–' +
+          escapeHtml(p.endTime || '22:00') + '</span></span>' +
         '<span class="r-status"><span class="badge">' + escapeHtml(passState(p)) + '</span></span>' +
         '</button>';
     }).join('');
@@ -1210,6 +1257,7 @@
     html += '<p><strong>' + escapeHtml(p.recipientName) + '</strong> — ' + escapeHtml(passState(p)) + '</p>';
     html += '<p>' + escapeHtml(p.recipientEmail) + '</p>';
     html += '<p>Giltig ' + p.startDate + ' – ' + p.endDate + ' (inkl.)</p>';
+    html += '<p>Öppen kl ' + escapeHtml(p.startTime || '06:00') + '–' + escapeHtml(p.endTime || '22:00') + '</p>';
     if (!p.revoked) {
       html += '<div class="actions"><button type="button" class="ghost" id="passRevoke">Återkalla länken</button></div>';
     }
@@ -1239,6 +1287,8 @@
       recipientEmail: $('dpEmail').value.trim(),
       startDate: $('dpStart').value,
       endDate: $('dpEnd').value,
+      startTime: $('dpStartTime').value || '06:00',
+      endTime: $('dpEndTime').value || '22:00',
       locale: $('dpLocale').value
     }, $('btnSendDoorPass')).then(function (res) {
       $('dpOk').hidden = false;

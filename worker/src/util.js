@@ -88,6 +88,40 @@ export function todayYmd(timeZone = 'Europe/Stockholm') {
   }).format(new Date());
 }
 
+/** HH:MM in Europe/Stockholm. */
+export function nowHm(timeZone = 'Europe/Stockholm') {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+    .format(new Date())
+    .replace('.', ':');
+}
+
+/** Normalize to HH:MM or fall back. Accepts HH:MM or HH:MM:SS. */
+export function normalizeHm(value, fallback = '06:00') {
+  const raw = String(value || '').trim().replace(/\u202f|\u00a0/g, ' ');
+  const m = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!m) return fallback;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min) || h < 0 || h > 23 || min < 0 || min > 59) {
+    return fallback;
+  }
+  return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+}
+
+/** Inclusive HH:MM window. Supports overnight when start > end. */
+export function isWithinHmWindow(startHm, endHm, atHm = nowHm()) {
+  const start = normalizeHm(startHm, '06:00');
+  const end = normalizeHm(endHm, '22:00');
+  const at = normalizeHm(atHm, nowHm());
+  if (start <= end) return at >= start && at <= end;
+  return at >= start || at <= end;
+}
+
 export function datesOverlap(aStart, aEnd, bStart, bEnd) {
   return String(aStart) <= String(bEnd) && String(bStart) <= String(aEnd);
 }

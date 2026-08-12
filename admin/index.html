@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="/" />
   <title>VKK Rental — Admin</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260812b" />
+  <link rel="stylesheet" href="css/styles.css?v=20260812d" />
 </head>
 <body>
   <div class="wrap">
@@ -60,7 +60,7 @@
 
       <div class="panel admin-view" id="doorPassSection" data-view="doorpass" hidden>
         <h2>Skicka dörrlänk</h2>
-        <p class="muted">Mejl med länk till en sida där mottagaren kan öppna entredörren. Giltig mellan start- och slutdatum (inklusive).</p>
+        <p class="muted">Mejl med länk till en sida där mottagaren kan öppna entredörren. Giltig mellan start- och slutdatum (inklusive) och inom angivna klockslag (standard 06:00–22:00).</p>
         <div class="row">
           <div><label>Namn</label><input id="dpName" placeholder="För- och efternamn" /></div>
           <div><label>E-post</label><input id="dpEmail" type="email" /></div>
@@ -76,6 +76,10 @@
               <option value="de">Deutsch</option>
             </select>
           </div>
+        </div>
+        <div class="row">
+          <div><label>Öppen från</label><input id="dpStartTime" type="time" value="06:00" /></div>
+          <div><label>Öppen till</label><input id="dpEndTime" type="time" value="22:00" /></div>
         </div>
         <p style="margin-top:1rem;"><button type="button" id="btnSendDoorPass">Skicka mejl med länk</button></p>
         <p class="ok" id="dpOk" hidden></p>
@@ -189,9 +193,9 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260812b"></script>
-  <script src="js/api.js?v=20260812b"></script>
-  <script src="js/status.js?v=20260812b"></script>
-  <script src="admin/admin.js?v=20260812b"></script>
+  <script src="js/config.js?v=20260812d"></script>
+  <script src="js/api.js?v=20260812d"></script>
+  <script src="js/status.js?v=20260812d"></script>
+  <script src="admin/admin.js?v=20260812d"></script>
 </body>
 </html>

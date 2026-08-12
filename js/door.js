@@ -22,6 +22,12 @@
 
   function doorStateLabel(od) {
     if (od.doorState === 'active') return I18n.t('doorStateActive');
+    if (od.doorState === 'outsideHours') {
+      return I18n.t('doorStateOutsideHours', {
+        start: od.startTime || '06:00',
+        end: od.endTime || '22:00'
+      });
+    }
     if (od.doorState === 'upcoming') {
       return I18n.t('doorStateUpcoming', { date: od.startDate || od.activeDate || '' });
     }
@@ -35,6 +41,10 @@
     html += '<h1>' + escapeHtml(pass.recipientName) + '</h1>';
     html += '<p class="muted">' + I18n.t('doorValid') + ': <strong>' +
       escapeHtml(pass.startDate) + ' – ' + escapeHtml(pass.endDate) + '</strong></p>';
+    html += '<p class="muted">' + escapeHtml(I18n.t('doorPassHours', {
+      start: pass.startTime || '06:00',
+      end: pass.endTime || '22:00'
+    })) + '</p>';
     html += '<p class="muted">' + I18n.t('doorPassValidHint') + '</p>';
 
     if (pass.doorUi || pass.showOpenDoor || pass.doorState) {
