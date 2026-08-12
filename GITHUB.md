@@ -1,4 +1,4 @@
-# GitHub Pages — RentR
+# GitHub Pages — VKK Rental
 
 Live site: **https://rent.vastervikclimbing.se/**
 

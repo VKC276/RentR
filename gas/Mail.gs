@@ -18,7 +18,7 @@ function mailJson_(obj, status) {
 function handleMailRelay_(body) {
   body = body || {};
   if (body.action === 'ping' || !body.action) {
-    return mailJson_({ ok: true, service: 'rentr-mail' });
+    return mailJson_({ ok: true, service: 'vkk-rental-mail' });
   }
   if (body.action !== 'relayMail') {
     return mailJson_({ error: 'Endast relayMail stöds', status: 400 }, 400);

@@ -14,7 +14,7 @@ Optional env:
   RELAY_ACTIVE_HIGH=0   # 0 = active-low (most 5V relay boards)
   PULSE_MS=1000         # fallback if Worker omits pulseMs
   POLL_SEC=2.5
-  ENV_FILE=/etc/rentr-door.env
+  ENV_FILE=/etc/vkk-rental-door.env
 """
 
 from __future__ import annotations
@@ -28,18 +28,21 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_API_URL = "https://rentr-api.muddy-rice-38d4.workers.dev"
-USER_AGENT = "VKK-Rental-Pi/2.0"
+USER_AGENT = "VKK-Rental-Pi/2.1"
+CANONICAL_ENV = "/etc/vkk-rental-door.env"
+LEGACY_ENV = "/etc/rentr-door.env"
 
 
 def bootstrap_env() -> None:
     """Load env files. Later files override earlier ones.
 
-    Priority (highest last): package .env → /etc/rentr-door.env → ENV_FILE.
+    Priority (highest last): package .env → legacy rentr → vkk-rental → ENV_FILE.
     """
     explicit = os.environ.get("ENV_FILE", "").strip()
     candidates = [
         Path(__file__).resolve().parent / ".env",
-        "/etc/rentr-door.env",
+        LEGACY_ENV,
+        CANONICAL_ENV,
     ]
     if explicit:
         candidates.append(explicit)
@@ -56,7 +59,7 @@ def load_env_file(path: str | Path, override: bool = False) -> None:
         lines = p.read_text(encoding="utf-8").splitlines()
     except PermissionError:
         print(
-            f"Kan inte läsa {p} (behörighet). Kör: sudo chown root:$USER {p} && sudo chmod 640 {p}",
+            f"Kan inte läsa {p} (behörighet). Kör: sudo chown root:\"$USER\" {p} && sudo chmod 640 {p}",
             file=sys.stderr,
             flush=True,
         )
@@ -163,7 +166,7 @@ def main() -> None:
     if not API_KEY:
         raise SystemExit(
             "Sätt PI_API_KEY (samma värde som Worker-secret DOOR_API_KEY).\n"
-            "Exempel: export PI_API_KEY=… eller /etc/rentr-door.env"
+            "Exempel: export PI_API_KEY=… eller /etc/vkk-rental-door.env"
         )
     if not API_URL:
         raise SystemExit("Sätt API_URL till Worker-URL:en")

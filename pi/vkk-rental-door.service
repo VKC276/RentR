@@ -8,7 +8,7 @@ Type=simple
 User=vkc
 Group=vkc
 WorkingDirectory=/home/vkc/RentR/pi
-Environment=ENV_FILE=/etc/rentr-door.env
+Environment=ENV_FILE=/etc/vkk-rental-door.env
 ExecStart=/home/vkc/RentR/pi/.venv/bin/python /home/vkc/RentR/pi/door_listener.py
 Restart=always
 RestartSec=5

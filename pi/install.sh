@@ -5,8 +5,10 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 USER_NAME="$(id -un)"
 VENV="$DIR/.venv"
-ENV_FILE="${ENV_FILE:-/etc/rentr-door.env}"
-SERVICE_NAME="rentr-door"
+ENV_FILE="${ENV_FILE:-/etc/vkk-rental-door.env}"
+LEGACY_ENV="/etc/rentr-door.env"
+SERVICE_NAME="vkk-rental-door"
+LEGACY_SERVICE="rentr-door"
 ENABLE_SERVICE=0
 SKIP_APT=0
 RUN_CONFIGURE=0
@@ -62,19 +64,29 @@ if ! "$VENV/bin/python" -c "import lgpio" 2>/dev/null; then
   echo "         Kör: sudo apt-get install -y python3-lgpio" >&2
 fi
 
+# Migrate legacy RentR env → VKK Rental
+if [[ -f "$LEGACY_ENV" && ! -f "$ENV_FILE" ]]; then
+  echo "==> Migrerar $LEGACY_ENV → $ENV_FILE"
+  sudo cp "$LEGACY_ENV" "$ENV_FILE"
+fi
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "==> Creating $ENV_FILE from example"
-  sudo cp "$DIR/rentr-door.env.example" "$ENV_FILE"
+  sudo cp "$DIR/vkk-rental-door.env.example" "$ENV_FILE"
 else
   echo "==> Env already exists: $ENV_FILE"
 fi
 sudo chown "root:${USER_NAME}" "$ENV_FILE"
 sudo chmod 640 "$ENV_FILE"
 
-# Stale local .env overrides caused 401s — do not create one.
 if [[ -f "$DIR/.env" ]]; then
   echo "==> Removing stale $DIR/.env (canonical file is $ENV_FILE)"
   rm -f "$DIR/.env"
+fi
+
+if systemctl list-unit-files "${LEGACY_SERVICE}.service" 2>/dev/null | grep -q "${LEGACY_SERVICE}"; then
+  echo "==> Disabling legacy ${LEGACY_SERVICE}.service"
+  sudo systemctl disable --now "${LEGACY_SERVICE}" 2>/dev/null || true
 fi
 
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"

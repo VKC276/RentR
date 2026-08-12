@@ -1,4 +1,4 @@
--- RentR schema (migrated from Google Sheets tabs)
+-- VKK Rental schema (migrated from Google Sheets tabs)
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (

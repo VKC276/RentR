@@ -19,7 +19,7 @@ def main() -> None:
     key = dl.API_KEY
     if not key:
         print(
-            "PI_API_KEY saknas. Sätt i /etc/rentr-door.env eller ta bort gammal pi/.env",
+            "PI_API_KEY saknas. Sätt med ./configure.sh eller i /etc/vkk-rental-door.env",
             file=sys.stderr,
             flush=True,
         )
@@ -37,8 +37,8 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"FAIL: {exc}", file=sys.stderr, flush=True)
         print(
-            "Tips: samma ASCII-nyckel i Worker DOOR_API_KEY och /etc/rentr-door.env; "
-            "ta bort ~/RentR/pi/.env om den har en gammal nyckel.",
+            "Tips: samma ASCII-nyckel i Worker DOOR_API_KEY och /etc/vkk-rental-door.env; "
+            "kör ./configure.sh --set PI_API_KEY=… --restart",
             file=sys.stderr,
             flush=True,
         )

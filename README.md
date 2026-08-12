@@ -1,6 +1,6 @@
-# RentR booking system
+# VKK Rental
 
-Hybrid **GitHub Pages** UI + **Google Apps Script** JSON API with data in **Google Sheets**.
+Booking system for Västerviks klätterklubb — **GitHub Pages** UI + **Cloudflare Worker/D1** API (legacy GAS mail relay).
 
 ## Features
 

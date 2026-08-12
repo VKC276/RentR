@@ -15,7 +15,7 @@ echo "=== Konfigurera API-nyckel och GPIO (utan nano) ==="
 
 echo
 echo "Klart. Följ loggar med:"
-echo "  sudo journalctl -u rentr-door -f"
+echo "  sudo journalctl -u vkk-rental-door -f"
 echo
 echo "Ändra .env senare:"
 echo "  ./configure.sh"

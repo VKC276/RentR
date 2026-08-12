@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Interactive helper to view/edit /etc/rentr-door.env without nano.
+# Interactive helper to view/edit /etc/vkk-rental-door.env without nano.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${ENV_FILE:-/etc/rentr-door.env}"
-EXAMPLE="$DIR/rentr-door.env.example"
+ENV_FILE="${ENV_FILE:-/etc/vkk-rental-door.env}"
+LEGACY_ENV="/etc/rentr-door.env"
+EXAMPLE="$DIR/vkk-rental-door.env.example"
 USER_NAME="$(id -un)"
-SERVICE_NAME="rentr-door"
+SERVICE_NAME="vkk-rental-door"
 
 DEFAULT_API_URL="https://rentr-api.muddy-rice-38d4.workers.dev"
 
@@ -28,12 +29,16 @@ Options:
   --show           Show current settings (API key masked)
   --set KEY=VALUE  Set one or more values, then save
   --test           Run test_api.py
-  --restart        Restart rentr-door service
+  --restart        Restart ${SERVICE_NAME} service
   -h, --help       This help
 EOF
 }
 
 ensure_env_file() {
+  if [[ ! -f "$ENV_FILE" && -f "$LEGACY_ENV" ]]; then
+    echo "Migrerar $LEGACY_ENV → $ENV_FILE"
+    sudo cp "$LEGACY_ENV" "$ENV_FILE"
+  fi
   if [[ ! -f "$ENV_FILE" ]]; then
     echo "Skapar $ENV_FILE från mall…"
     sudo cp "$EXAMPLE" "$ENV_FILE"
@@ -42,7 +47,6 @@ ensure_env_file() {
   sudo chmod 640 "$ENV_FILE"
 }
 
-# Load KEY=VALUE into associative-like vars via temp file in current shell.
 read_env() {
   ensure_env_file
   API_URL="$DEFAULT_API_URL"
@@ -117,7 +121,6 @@ EOF
   rm -f "$tmp"
   sudo chown "root:${USER_NAME}" "$ENV_FILE"
   sudo chmod 640 "$ENV_FILE"
-  # Keep local .env out of the way (old copies caused 401).
   if [[ -f "$DIR/.env" ]]; then
     rm -f "$DIR/.env"
     echo "Tog bort $DIR/.env (använd $ENV_FILE)."
@@ -177,7 +180,7 @@ interactive() {
   fi
 
   if systemctl list-unit-files "$SERVICE_NAME.service" >/dev/null 2>&1; then
-    read -r -p "Starta om tjänsten rentr-door? [Y/n] " ans || true
+    read -r -p "Starta om tjänsten ${SERVICE_NAME}? [Y/n] " ans || true
     ans="${ans:-Y}"
     if [[ ! "$ans" =~ ^[Nn] ]]; then
       restart_service
