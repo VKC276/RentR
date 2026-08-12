@@ -35,6 +35,7 @@ const MAIL_I18N = {
     labelGuest: 'Gäst',
     labelGuestMessage: 'Meddelande',
     labelManage: 'Hantera bokning',
+    labelOpenAdmin: 'Öppna admin',
     labelOpen: 'Öppna dörr',
     labelValid: 'Giltig',
     daysNote: 'Start- och slutdatum räknas som hela dygn.',
@@ -67,6 +68,7 @@ const MAIL_I18N = {
     labelStatus: 'Status',
     labelGuest: 'Guest',
     labelManage: 'Manage booking',
+    labelOpenAdmin: 'Open admin',
     labelOpen: 'Open door',
     labelValid: 'Valid',
     daysNote: 'Start and end dates each count as a full day.',
@@ -99,6 +101,7 @@ const MAIL_I18N = {
     labelStatus: 'Status',
     labelGuest: 'Gast',
     labelManage: 'Buchung verwalten',
+    labelOpenAdmin: 'Admin öffnen',
     labelOpen: 'Tür öffnen',
     labelValid: 'Gültig',
     daysNote: 'Start- und Enddatum zählen als volle Tage.',
@@ -125,6 +128,10 @@ function manageUrl(pagesBaseUrl, token) {
   return (pagesBaseUrl || '').replace(/\/$/, '') + '/booking.html?t=' + encodeURIComponent(token || '');
 }
 
+function adminUrl(pagesBaseUrl) {
+  return (pagesBaseUrl || '').replace(/\/$/, '') + '/admin/';
+}
+
 function escapeHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -147,6 +154,7 @@ function bookingVars(booking, magicToken, cfg) {
     status: statusLabel(booking.status, locale),
     email: booking.email,
     url: manageUrl(cfg && cfg.pagesBaseUrl, magicToken || ''),
+    adminUrl: adminUrl(cfg && cfg.pagesBaseUrl),
     locale,
   };
 }
@@ -346,8 +354,8 @@ export async function mailBookingCreated(env, booking, magicToken) {
     intro: t('sv', 'adminNewIntro', v),
     vars: { name: 'admin' },
     rows: adminBookingRows('sv', booking, v),
-    ctaLabel: t('sv', 'labelManage'),
-    ctaUrl: v.url,
+    ctaLabel: t('sv', 'labelOpenAdmin'),
+    ctaUrl: v.adminUrl,
   });
   for (const to of await adminEmails(env.DB)) messages.push(toMessage(to, admin));
   await sendMessages(env, messages);
@@ -398,8 +406,8 @@ export async function mailGuestCancelled(env, booking, magicToken) {
     intro: t('sv', 'adminCancelledIntro', v),
     vars: { name: 'admin' },
     rows: adminBookingRows('sv', booking, v, { withTotal: false }),
-    ctaLabel: t('sv', 'labelManage'),
-    ctaUrl: v.url,
+    ctaLabel: t('sv', 'labelOpenAdmin'),
+    ctaUrl: v.adminUrl,
   });
   for (const to of await adminEmails(env.DB)) messages.push(toMessage(to, admin));
   await sendMessages(env, messages);
@@ -414,8 +422,8 @@ export async function mailAdminChange(env, booking, magicToken) {
     intro: t('sv', 'adminChangeIntro', v),
     vars: { name: 'admin' },
     rows: adminBookingRows('sv', booking, v),
-    ctaLabel: t('sv', 'labelManage'),
-    ctaUrl: v.url,
+    ctaLabel: t('sv', 'labelOpenAdmin'),
+    ctaUrl: v.adminUrl,
   });
   const admins = await adminEmails(env.DB);
   await sendMessages(env, admins.map((to) => toMessage(to, admin)));
