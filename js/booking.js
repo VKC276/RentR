@@ -17,72 +17,69 @@
   // The server accepts a cancellation up until the equipment is handed out.
   var CANCELLABLE = ['Requested', 'Approved', 'ChangePending', 'CancelPending'];
 
-  function doorStateLabel(od) {
-    var date = od.activeDate || '';
-    if (od.doorState === 'active') {
-      return od.mode === 'return'
-        ? I18n.t('doorStateReturnActive')
-        : I18n.t('doorStatePickupActive');
+  function renderSelfServiceBlock(kind, section) {
+    var title = kind === 'pickup'
+      ? I18n.t('selfServicePickupTitle')
+      : I18n.t('selfServiceReturnTitle');
+    var html = '<div class="self-service-block">';
+    html += '<h3>' + escapeHtml(title) + '</h3>';
+
+    var phase = section && section.phase ? section.phase : 'notAllowed';
+    var date = (section && section.date) || '';
+
+    if (phase === 'notAllowed') {
+      html += '<p class="muted">' + escapeHtml(I18n.t('selfServiceNotAvailable')) + '</p>';
+    } else if (phase === 'upcoming') {
+      html += '<p class="muted">' + escapeHtml(
+        kind === 'pickup'
+          ? I18n.t('selfServicePickupActivates', { date: date })
+          : I18n.t('selfServiceReturnActivates', { date: date })
+      ) + '</p>';
+    } else if (phase === 'passed') {
+      html += '<p class="muted">' + escapeHtml(
+        kind === 'pickup'
+          ? I18n.t('doorStatePickupPassed')
+          : I18n.t('doorStateReturnPassed')
+      ) + '</p>';
+    } else if (phase === 'done') {
+      html += '<p class="door-state is-active">' + escapeHtml(
+        kind === 'pickup'
+          ? I18n.t('doorStatePickedUp')
+          : I18n.t('doorStateReturned')
+      ) + '</p>';
+    } else if (phase === 'active' || phase === 'confirm') {
+      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepOpen')) + '</p>';
+      html += '<div class="door-row">';
+      html += '<button type="button" id="btnDoor' + (kind === 'pickup' ? 'Pickup' : 'Return') + '">' +
+        I18n.t('openDoor') + '</button>';
+      html += '</div>';
+      if (phase === 'confirm' || (section && section.showConfirm)) {
+        html += '<p class="door-steps">' + escapeHtml(
+          kind === 'pickup'
+            ? I18n.t('selfServiceStepConfirmPickup')
+            : I18n.t('selfServiceStepConfirmReturn')
+        ) + '</p>';
+        html += '<div class="door-row">';
+        html += '<button type="button" class="warn" id="btnConfirm' +
+          (kind === 'pickup' ? 'Pickup' : 'Return') + '">' +
+          I18n.t(kind === 'pickup' ? 'confirmPickup' : 'confirmReturn') + '</button>';
+        html += '</div>';
+      }
+    } else {
+      html += '<p class="muted">' + escapeHtml(I18n.t('selfServiceNotAvailable')) + '</p>';
     }
-    if (od.doorState === 'upcoming') {
-      return od.mode === 'return'
-        ? I18n.t('doorStateReturnUpcoming', { date: date })
-        : I18n.t('doorStatePickupUpcoming', { date: date });
-    }
-    if (od.doorState === 'pickupPassed') return I18n.t('doorStatePickupPassed');
-    if (od.doorState === 'returnPassed') return I18n.t('doorStateReturnPassed');
-    if (od.doorState === 'pickedUp') return I18n.t('doorStatePickedUp');
-    if (od.doorState === 'done' || od.doorState === 'returned') return I18n.t('doorStateReturned');
-    if (od.doorState === 'passed') return I18n.t('doorStatePassed');
-    if (od.doorState === 'revoked') return I18n.t('doorStateRevoked');
-    if (od.doorState === 'unavailable') return I18n.t('doorStateUnavailable');
-    return '';
+
+    html += '</div>';
+    return html;
   }
 
   function renderDoorControls(od) {
-    if (!od.showConfirmPickup && !od.showConfirmReturn && !od.doorUi) return '';
-
-    var mode = od.mode || (od.showConfirmPickup ? 'pickup' : (od.showConfirmReturn ? 'return' : ''));
-    var state = od.doorState || '';
-    var lead = '';
-    if (od.showConfirmPickup || (mode === 'pickup' && state !== 'pickedUp' && state !== 'pickupPassed')) {
-      lead = I18n.t('selfServicePickupExplain');
-    } else if (od.showConfirmReturn || mode === 'return') {
-      lead = I18n.t('selfServiceReturnExplain');
-    } else if (state === 'pickedUp') {
-      lead = '';
-    } else {
-      lead = I18n.t('openDoorHint');
-    }
+    if (!od.doorUi && !od.pickup && !od.return) return '';
 
     var html = '<section class="booking-chapter self-service">';
     html += '<h2>' + escapeHtml(I18n.t('selfServiceTitle')) + '</h2>';
-    if (lead) html += '<p class="muted chapter-lead">' + escapeHtml(lead) + '</p>';
-
-    if (od.showOpenDoor || state === 'upcoming' || state === 'active') {
-      var enabled = !!od.showOpenDoor;
-      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepOpen')) + '</p>';
-      html += '<div class="door-row">';
-      html += '<button type="button" id="btnDoor"' + (enabled ? '' : ' disabled') + '>' +
-        I18n.t('openDoor') + '</button>';
-      html += '<span class="door-state' + (enabled ? ' is-active' : '') + '">' +
-        escapeHtml(doorStateLabel(od)) + '</span>';
-      html += '</div>';
-    }
-    if (od.showConfirmPickup) {
-      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepConfirmPickup')) + '</p>';
-      html += '<div class="door-row">';
-      html += '<button type="button" class="warn" id="btnConfirmPickup">' + I18n.t('confirmPickup') + '</button>';
-      html += '</div>';
-    } else if (od.showConfirmReturn) {
-      html += '<p class="door-steps">' + escapeHtml(I18n.t('selfServiceStepConfirmReturn')) + '</p>';
-      html += '<div class="door-row">';
-      html += '<button type="button" class="warn" id="btnConfirmReturn">' + I18n.t('confirmReturn') + '</button>';
-      html += '</div>';
-    } else if (!od.showOpenDoor && state !== 'upcoming' && state !== 'active') {
-      html += '<p class="door-state">' + escapeHtml(doorStateLabel(od)) + '</p>';
-    }
-
+    html += renderSelfServiceBlock('pickup', od.pickup || { phase: 'notAllowed' });
+    html += renderSelfServiceBlock('return', od.return || { phase: 'notAllowed' });
     html += '</section>';
     return html;
   }
@@ -111,16 +108,20 @@
     $('content').hidden = false;
     $('loading').hidden = true;
 
-    var btnDoor = $('btnDoor');
-    if (btnDoor && !btnDoor.disabled) {
-      btnDoor.onclick = function () {
-        Status.button(btnDoor, I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token }))
+    function wireDoor(btnId) {
+      var btn = $(btnId);
+      if (!btn || btn.disabled) return;
+      btn.onclick = function () {
+        Status.button(btn, I18n.t('busyDoor'), Api.call('openDoor', { magicToken: token, t: token }))
           .then(function (res) {
             booking = res.booking;
             render();
           }).catch(function (e) { showErr(e.message); });
       };
     }
+    wireDoor('btnDoorPickup');
+    wireDoor('btnDoorReturn');
+
     var btnPickup = $('btnConfirmPickup');
     if (btnPickup) {
       btnPickup.onclick = function () {

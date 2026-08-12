@@ -102,92 +102,81 @@ export function computeOpenDoorFlags(b) {
   const endDate = String(b.endDate || b.end_date || '');
   const doorOpenedReturn = !!(b.doorOpenedForReturn || b.door_opened_for_return);
   const doorOpenedPickup = !!(b.doorOpenedForPickup || b.door_opened_for_pickup);
-  // Pickup only while still Approved; return only after HandedOut — keeps same-day rentals ordered.
-  const pickupActive = allowPickup && status === 'Approved' && startDate === today;
-  const returnActive = allowReturn && status === 'HandedOut' && endDate === today;
-  const doorUi =
-    (status === 'Approved' || status === 'HandedOut') && (allowPickup || allowReturn);
 
-  const base = {
-    showOpenDoor: false,
-    showConfirmReturn: false,
-    showConfirmPickup: false,
-    mode: null,
-    doorUi: false,
-    doorState: 'hidden',
-    activeDate: null,
+  function pickupSection() {
+    if (!allowPickup) {
+      return { phase: 'notAllowed', date: startDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (status === 'HandedOut' || status === 'Returned') {
+      return { phase: 'done', date: startDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (status !== 'Approved') {
+      return { phase: 'notAllowed', date: startDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (startDate > today) {
+      return { phase: 'upcoming', date: startDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (startDate === today) {
+      return {
+        phase: doorOpenedPickup ? 'confirm' : 'active',
+        date: startDate,
+        showOpenDoor: true,
+        showConfirm: doorOpenedPickup,
+      };
+    }
+    return { phase: 'passed', date: startDate, showOpenDoor: false, showConfirm: false };
+  }
+
+  function returnSection() {
+    if (!allowReturn) {
+      return { phase: 'notAllowed', date: endDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (status === 'Returned') {
+      return { phase: 'done', date: endDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (status !== 'HandedOut') {
+      // Allowed later, but not openable until handed out — still show activation date.
+      if (endDate && endDate >= today) {
+        return { phase: 'upcoming', date: endDate, showOpenDoor: false, showConfirm: false };
+      }
+      if (endDate && endDate < today) {
+        return { phase: 'passed', date: endDate, showOpenDoor: false, showConfirm: false };
+      }
+      return { phase: 'notAllowed', date: endDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (endDate > today) {
+      return { phase: 'upcoming', date: endDate, showOpenDoor: false, showConfirm: false };
+    }
+    if (endDate === today) {
+      return {
+        phase: doorOpenedReturn ? 'confirm' : 'active',
+        date: endDate,
+        showOpenDoor: true,
+        showConfirm: doorOpenedReturn,
+      };
+    }
+    return { phase: 'passed', date: endDate, showOpenDoor: false, showConfirm: false };
+  }
+
+  const pickup = pickupSection();
+  const ret = returnSection();
+  const doorUi = ['Approved', 'HandedOut', 'Returned'].includes(status);
+  const mode = pickup.showOpenDoor ? 'pickup' : ret.showOpenDoor ? 'return' : null;
+
+  return {
+    showOpenDoor: !!(pickup.showOpenDoor || ret.showOpenDoor),
+    showConfirmReturn: !!ret.showConfirm,
+    showConfirmPickup: !!pickup.showConfirm,
+    mode,
+    doorUi,
+    doorState: mode ? 'active' : 'hidden',
+    activeDate: mode === 'return' ? endDate : startDate,
     startDate,
     endDate,
     allowPickup,
     allowReturn,
-  };
-
-  if (status === 'Returned') {
-    return { ...base, doorState: 'done' };
-  }
-  if (!doorUi) return base;
-
-  // On the active day the door stays openable until the guest confirms —
-  // door_opened_* only unlocks the confirm step, it does not revoke Open door.
-  if (returnActive) {
-    return {
-      ...base,
-      doorUi: true,
-      showOpenDoor: true,
-      showConfirmReturn: doorOpenedReturn,
-      mode: 'return',
-      doorState: 'active',
-      activeDate: endDate,
-    };
-  }
-  if (pickupActive) {
-    return {
-      ...base,
-      doorUi: true,
-      showOpenDoor: true,
-      showConfirmPickup: doorOpenedPickup,
-      mode: 'pickup',
-      doorState: 'active',
-      activeDate: startDate,
-    };
-  }
-
-  const candidates = [];
-  if (allowPickup && status === 'Approved' && startDate > today) {
-    candidates.push({ date: startDate, mode: 'pickup' });
-  }
-  if (allowReturn && (status === 'Approved' || status === 'HandedOut') && endDate > today) {
-    candidates.push({ date: endDate, mode: 'return' });
-  }
-  candidates.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-
-  if (candidates.length) {
-    return {
-      ...base,
-      doorUi: true,
-      mode: candidates[0].mode,
-      doorState: 'upcoming',
-      activeDate: candidates[0].date,
-    };
-  }
-
-  // Nothing openable today — explain why, by mode/status.
-  if (status === 'HandedOut') {
-    if (allowReturn && endDate && endDate < today) {
-      return { ...base, doorUi: true, mode: 'return', doorState: 'returnPassed', activeDate: endDate };
-    }
-    return { ...base, doorUi: true, mode: 'pickup', doorState: 'pickedUp', activeDate: startDate };
-  }
-  if (allowPickup && status === 'Approved' && startDate && startDate < today) {
-    return { ...base, doorUi: true, mode: 'pickup', doorState: 'pickupPassed', activeDate: startDate };
-  }
-  if (allowReturn && endDate && endDate < today) {
-    return { ...base, doorUi: true, mode: 'return', doorState: 'returnPassed', activeDate: endDate };
-  }
-  return {
-    ...base,
-    doorUi: true,
-    doorState: 'unavailable',
+    pickup,
+    return: ret,
   };
 }
 

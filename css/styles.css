@@ -931,6 +931,20 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .booking-chapter.self-service {
   border-color: rgba(13, 110, 110, 0.28);
 }
+.self-service-block {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+.self-service-block:first-of-type {
+  margin-top: 0.65rem;
+  padding-top: 0;
+  border-top: 0;
+}
+.self-service-block h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+}
 .door-block { margin-top: 1.25rem; }
 .door-hint { margin: 0 0 0.55rem; }
 .door-steps {
