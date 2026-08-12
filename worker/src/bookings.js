@@ -702,6 +702,9 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       throw softError('Kan inte avslå i status ' + b.status, 400);
     }
   } else if (action === 'handOut') {
+    if (b.status !== 'Approved') {
+      throw softError('Kan bara lämna ut godkänd bokning', 400);
+    }
     if (payload.padId) {
       const nextPads = [String(payload.padId)];
       const price = await calculatePrice(db, nextPads, b.start_date, b.end_date);
@@ -765,6 +768,9 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       )
       .run();
   } else if (action === 'return') {
+    if (b.status !== 'HandedOut') {
+      throw softError('Kan bara återlämna utlämnad bokning', 400);
+    }
     await db
       .prepare(
         `UPDATE bookings SET status = 'Returned', door_opened_for_return = 0, updated_at = ? WHERE id = ?`
@@ -772,6 +778,34 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       .bind(now, bookingId)
       .run();
     releaseLocks = true;
+  } else if (action === 'undoHandOut') {
+    if (b.status !== 'HandedOut') {
+      throw softError('Kan bara ångra utlämning för utlämnad bokning', 400);
+    }
+    await db
+      .prepare(
+        `UPDATE bookings SET status = 'Approved', door_opened_for_pickup = 0, door_opened_for_return = 0, updated_at = ? WHERE id = ?`
+      )
+      .bind(now, bookingId)
+      .run();
+  } else if (action === 'undoReturn') {
+    if (b.status !== 'Returned') {
+      throw softError('Kan bara ångra återlämning för återlämnad bokning', 400);
+    }
+    const { results: padRows } = await db
+      .prepare(`SELECT pad_id AS id FROM booking_pads WHERE booking_id = ?`)
+      .bind(bookingId)
+      .all();
+    const padIds = (padRows || []).map((r) => r.id);
+    if (!padIds.length) throw softError('Bokningen saknar utrustning', 400);
+    await assertPadsAvailable(db, padIds, b.start_date, b.end_date, bookingId);
+    await setPadLocks(db, bookingId, padIds, b.start_date, b.end_date);
+    await db
+      .prepare(
+        `UPDATE bookings SET status = 'HandedOut', door_opened_for_return = 0, updated_at = ? WHERE id = ?`
+      )
+      .bind(now, bookingId)
+      .run();
   } else if (action === 'setPaid') {
     const paid = !!payload.paid;
     await db

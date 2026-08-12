@@ -927,6 +927,11 @@ button.ghost.is-busy .status-spinner {
 .err { color: #a32020; margin: 0.5rem 0; }
 .ok { color: var(--ok); }
 /* .row would give these a 180px flex basis and squeeze them into a column. */
+.admin-user {
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
 .topbar-right { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .nav { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .nav a {

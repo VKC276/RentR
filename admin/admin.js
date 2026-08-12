@@ -83,7 +83,20 @@
     $('loginPanel').hidden = !show;
     $('app').hidden = show;
     $('nav').hidden = show;
+    if (show) renderAdminUser(null);
     if (!show) showView(currentView());
+  }
+
+  function renderAdminUser(user) {
+    var el = $('adminUser');
+    if (!user) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    var name = ((user.firstName || '') + ' ' + (user.lastName || '')).trim();
+    el.textContent = name ? name + ' · ' + user.email : user.email;
+    el.hidden = false;
   }
 
   var VIEWS = { bookings: true, doorpass: true, settings: true };
@@ -133,6 +146,7 @@
     }, $('btnLogin')).then(function (res) {
       session = res.session.token;
       localStorage.setItem('adminSession', session);
+      renderAdminUser(res.user);
       showLogin(false);
       refreshAll();
     }).catch(function (err) {
@@ -164,6 +178,7 @@
       renderUsers(res.users || []);
       renderPasses(res.passes || []);
       renderAdminConfig(res.adminConfig || {});
+      if (res.user) renderAdminUser(res.user);
       return loadTimeline();
     }).catch(function (e) {
       if (e.status === 401) showLogin(true);
@@ -482,6 +497,16 @@
     html += '<div><dt>Summa</dt><dd><strong>' + b.priceTotal + ' SEK</strong></dd></div>';
     html += '</dl></div>';
 
+    if (b.status === 'Requested' || b.status === 'ChangePending') {
+      html += '<section class="detail-section">';
+      html += '<h3>Förfrågan</h3>';
+      html += '<p class="detail-section-lead">Godkänn eller avslå innan betalning och utlämning.</p>';
+      html += '<div class="actions">';
+      html += '<button type="button" id="actApprove">Godkänn</button>';
+      html += '<button type="button" class="ghost" id="actReject">Avslå</button>';
+      html += '</div></section>';
+    }
+
     html += '<section class="detail-section">';
     html += '<h3>Betalning</h3>';
     html += '<p class="detail-section-lead">' + (b.paid
@@ -494,24 +519,15 @@
 
     html += '<section class="detail-section">';
     html += '<h3>Utlämning &amp; återlämning</h3>';
-    if (b.status === 'Requested' || b.status === 'ChangePending') {
-      html += '<p class="detail-section-lead">Godkänn eller avslå förfrågan innan utlämning.</p>';
-      html += '<div class="actions">';
-      html += '<button type="button" id="actApprove">Godkänn</button>';
-      html += '<button type="button" class="ghost" id="actReject">Avslå</button>';
-      html += '</div>';
-    } else if (b.status === 'Approved') {
-      html += '<p class="detail-section-lead">Kontrollera utrustningen och bekräfta när gästen får den.</p>';
-      html += '<div class="actions"><button type="button" class="warn" id="actHandOut">Lämna ut</button></div>';
-    } else if (b.status === 'HandedOut') {
-      html += '<p class="detail-section-lead">Utrustningen är utlämnad. Markera när den är återlämnad.</p>';
-      html += '<div class="actions"><button type="button" id="actReturn">Markera återlämnad</button></div>';
-    } else if (b.status === 'Returned') {
-      html += '<p class="detail-section-lead muted">Återlämning är registrerad.</p>';
+    if (['Approved', 'HandedOut', 'Returned'].indexOf(b.status) >= 0) {
+      var handoverLabel = b.status === 'HandedOut' ? 'Återlämna' : 'Lämna ut';
+      var handoverClass = b.status === 'Approved' ? 'warn' : (b.status === 'Returned' ? 'ghost' : '');
+      html += '<p class="detail-section-lead">Hantera hela beställningen med en knapp.</p>';
+      html += '<div class="actions"><button type="button" class="' + handoverClass + '" id="actHandover">' +
+        handoverLabel + '</button></div>';
     } else {
       html += '<p class="detail-section-lead muted">Ingen utlämningsåtgärd för denna status.</p>';
     }
-    html += '<div id="handOutBox" class="detail-panel" hidden></div>';
     html += '</section>';
 
     html += '<section class="detail-section">';
@@ -633,9 +649,26 @@
 
     onAct('actApprove', 'approve');
     onAct('actReject', 'reject');
-    onAct('actReturn', 'return');
     onAct('actPaid', 'setPaid', { paid: !b.paid });
     onAct('actResendMail', 'resendMail');
+    if ($('actHandover')) {
+      $('actHandover').onclick = function () {
+        var op = 'handOut';
+        var msg = '';
+        if (b.status === 'HandedOut') {
+          op = 'return';
+          msg = 'Markera hela beställningen som återlämnad?';
+        } else if (b.status === 'Returned') {
+          op = 'undoReturn';
+          msg = 'Ångra återlämning och markera som utlämnad igen?';
+        } else {
+          var padNames = (b.pads || []).map(function (p) { return p.name; }).join(', ') || '—';
+          msg = 'Lämna ut hela beställningen?\n\n' + padNames;
+        }
+        if (!window.confirm(msg)) return;
+        act(op, {}, $('actHandover'));
+      };
+    }
     var btnDelete = $('actDelete');
     if (btnDelete) {
       btnDelete.onclick = function () {
@@ -703,36 +736,6 @@
       // Open the editor at once when the booking is double-booked — that is why
       // the admin opened the card.
       if (b.doubleBooked) $('actEditPads').click();
-    }
-
-    if ($('actHandOut')) {
-      $('actHandOut').onclick = function () {
-        var box = $('handOutBox');
-        box.hidden = false;
-        box.innerHTML = '<p><strong>Bekräfta utlämning</strong></p><p class="muted">Laddar ledig utrustning…</p>';
-        api('availablePadsForBooking', { bookingId: b.id }, $('actHandOut')).then(function (res) {
-          var pads = (res.pads || []).filter(function (p) { return p.available || p.assigned; });
-          var opts = pads.map(function (p) {
-            var sel = String((b.padIds || [])[0]) === String(p.id) ? ' selected' : '';
-            var tag = p.assigned ? ' (bokad)' : (p.available ? '' : ' (upptagen)');
-            return '<option value="' + p.id + '"' + sel + '>' + escapeHtml(p.name) + tag + '</option>';
-          }).join('');
-          box.innerHTML =
-            '<p><strong>Bekräfta utlämning</strong></p>' +
-            '<p class="muted">' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' +
-            b.startDate + ' – ' + b.endDate + '</p>' +
-            '<label for="hoSelect">Utrustning som lämnas ut</label>' +
-            '<select id="hoSelect">' + opts + '</select>' +
-            '<div class="actions">' +
-            '<button type="button" id="hoOk">Bekräfta utlämning</button>' +
-            '<button type="button" class="ghost" id="hoCancel">Avbryt</button>' +
-            '</div>';
-          onAct('hoOk', 'handOut', function () { return { padId: $('hoSelect').value }; });
-          $('hoCancel').onclick = function () { box.hidden = true; box.innerHTML = ''; };
-        }).catch(function (e) {
-          box.innerHTML = '<p class="err">' + escapeHtml(e.message) + '</p>';
-        });
-      };
     }
   }
 

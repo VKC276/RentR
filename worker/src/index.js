@@ -140,9 +140,11 @@ async function route(env, action, body, ctx) {
     case 'listBookings':
       await requireAdmin(env, sessionToken);
       return { bookings: await listBookingsAdmin(env.DB, body) };
-    case 'adminOverview':
-      await requireAdmin(env, sessionToken);
-      return adminOverview(env, body, ctx);
+    case 'adminOverview': {
+      const user = await requireAdmin(env, sessionToken);
+      const overview = await adminOverview(env, body, ctx);
+      return Object.assign({ user }, overview);
+    }
     case 'adminUpdateBooking':
       return adminUpdateBooking(
         env,

@@ -11,12 +11,15 @@
   <div class="wrap">
     <div class="topbar">
       <div class="brand">RentR Admin</div>
-      <nav class="nav" id="nav" hidden>
-        <a href="#bookings" data-view="bookings" class="is-active">Bokningar</a>
-        <a href="#doorpass" data-view="doorpass">Dörrlänk</a>
-        <a href="#settings" data-view="settings">Inställningar</a>
-        <a href="#" id="logout">Logga ut</a>
-      </nav>
+      <div class="topbar-right">
+        <span class="admin-user muted" id="adminUser" hidden></span>
+        <nav class="nav" id="nav" hidden>
+          <a href="#bookings" data-view="bookings" class="is-active">Bokningar</a>
+          <a href="#doorpass" data-view="doorpass">Dörrlänk</a>
+          <a href="#settings" data-view="settings">Inställningar</a>
+          <a href="#" id="logout">Logga ut</a>
+        </nav>
+      </div>
     </div>
 
     <div class="panel" id="loginPanel">
