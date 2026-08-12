@@ -6,13 +6,36 @@ import {
   parsePadIds,
   eachDate,
   calcDays,
+  todayYmd,
+  datesOverlap,
+  BLOCKING_STATUSES,
+  statusLabel,
+  kick,
 } from './util.js';
 import { calculatePrice } from './pricing.js';
 import { getConfigMap } from './config.js';
-import { assertPadsAvailable } from './calendar.js';
+import { assertPadsAvailable, findUnavailablePads } from './calendar.js';
+import {
+  mailBookingCreated,
+  mailGuestStatus,
+  mailGuestCancelled,
+  mailAdminChange,
+} from './mail.js';
+
+const GUEST_CANCELLABLE_STATUSES = ['Requested', 'Approved', 'ChangePending', 'CancelPending'];
+
+const BOOKING_SELECT = `
+  SELECT id, booking_number AS bookingNumber, first_name AS firstName, last_name AS lastName,
+         email, phone, start_date AS startDate, end_date AS endDate, days, locale, status,
+         allow_self_pickup AS allowSelfPickup, allow_self_return AS allowSelfReturn,
+         paid, paid_at AS paidAt, price_base AS priceBase, price_discount AS priceDiscount,
+         price_total AS priceTotal, price_override AS priceOverride,
+         price_breakdown_json AS priceBreakdownJson,
+         door_opened_for_return AS doorOpenedForReturn, notes,
+         created_at AS createdAt, updated_at AS updatedAt
+  FROM bookings`;
 
 async function nextBookingNumber(db) {
-  // Serialize counter updates. D1 applies each statement; we bump then read.
   await db.prepare(`UPDATE counters SET value = value + 1 WHERE key = 'bookingNumber'`).run();
   const row = await db.prepare(`SELECT value FROM counters WHERE key = 'bookingNumber'`).first();
   if (!row) throw softError('Bokningsräknare saknas', 500);
@@ -20,7 +43,7 @@ async function nextBookingNumber(db) {
   return year + '-' + String(row.value).padStart(5, '0');
 }
 
-async function createMagicToken(db, bookingId) {
+export async function createMagicToken(db, bookingId) {
   const cfg = await getConfigMap(db);
   const days = Number(cfg.magicLinkDays || 90);
   const token = randomHex(32);
@@ -36,25 +59,136 @@ async function createMagicToken(db, bookingId) {
   return token;
 }
 
+export async function resolveMagicToken(db, token) {
+  if (!token) return null;
+  const t = await db
+    .prepare(`SELECT token, booking_id, expires_at, revoked FROM tokens WHERE token = ?`)
+    .bind(token)
+    .first();
+  if (!t || t.revoked) return null;
+  if (new Date(t.expires_at).getTime() < Date.now()) return null;
+  return t;
+}
+
+export async function logEvent(db, bookingId, type, actor, detail) {
+  await db
+    .prepare(
+      `INSERT INTO booking_events (id, booking_id, type, actor, detail, at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      uid(),
+      bookingId,
+      type,
+      actor || '',
+      typeof detail === 'string' ? detail : JSON.stringify(detail || {}),
+      nowIso()
+    )
+    .run();
+}
+
 function manageUrl(pagesBaseUrl, token) {
   return (pagesBaseUrl || '').replace(/\/$/, '') + '/booking.html?t=' + encodeURIComponent(token);
 }
 
-async function enrichBooking(db, id) {
-  const b = await db
-    .prepare(
-      `SELECT id, booking_number AS bookingNumber, first_name AS firstName, last_name AS lastName,
-              email, phone, start_date AS startDate, end_date AS endDate, days, locale, status,
-              allow_self_pickup AS allowSelfPickup, allow_self_return AS allowSelfReturn,
-              paid, paid_at AS paidAt, price_base AS priceBase, price_discount AS priceDiscount,
-              price_total AS priceTotal, price_override AS priceOverride,
-              price_breakdown_json AS priceBreakdownJson,
-              door_opened_for_return AS doorOpenedForReturn, notes,
-              created_at AS createdAt, updated_at AS updatedAt
-       FROM bookings WHERE id = ?`
+export function computeOpenDoorFlags(b) {
+  const today = todayYmd();
+  const status = b.status;
+  const allowPickup = !!(b.allowSelfPickup || b.allow_self_pickup);
+  const allowReturn = !!(b.allowSelfReturn || b.allow_self_return);
+  const startDate = b.startDate || b.start_date;
+  const endDate = b.endDate || b.end_date;
+  const doorOpened = !!(b.doorOpenedForReturn || b.door_opened_for_return);
+
+  const pickup =
+    allowPickup && (status === 'Approved' || status === 'HandedOut') && String(startDate) === today;
+  const ret =
+    allowReturn &&
+    (status === 'HandedOut' || status === 'Approved') &&
+    String(endDate) === today &&
+    status !== 'Returned';
+
+  if (status === 'Returned') {
+    return { showOpenDoor: false, showConfirmReturn: false, mode: null };
+  }
+  if (ret && doorOpened) {
+    return { showOpenDoor: false, showConfirmReturn: true, mode: 'return' };
+  }
+  if (ret) {
+    return { showOpenDoor: true, showConfirmReturn: false, mode: 'return' };
+  }
+  if (pickup) {
+    return { showOpenDoor: true, showConfirmReturn: false, mode: 'pickup' };
+  }
+  return { showOpenDoor: false, showConfirmReturn: false, mode: null };
+}
+
+export async function releasePadLocks(db, bookingId) {
+  await db.prepare(`DELETE FROM pad_day_locks WHERE booking_id = ?`).bind(bookingId).run();
+}
+
+function padLockInsertStmts(db, bookingId, padIds, startDate, endDate) {
+  const dayList = eachDate(startDate, endDate);
+  return padIds.flatMap((pid) =>
+    dayList.map((day) =>
+      db
+        .prepare(`INSERT INTO pad_day_locks (pad_id, day, booking_id) VALUES (?, ?, ?)`)
+        .bind(pid, day, bookingId)
     )
-    .bind(id)
-    .first();
+  );
+}
+
+async function runLockBatch(db, stmts, padIds, startDate, endDate, bookingId) {
+  try {
+    await db.batch(stmts);
+  } catch (e) {
+    const msg = String(e && e.message ? e.message : e);
+    if (/UNIQUE|constraint|already exists/i.test(msg)) {
+      const unavailable = await findUnavailablePads(db, padIds, startDate, endDate, bookingId);
+      throw softError(
+        'Inte längre ledig för valt intervall: ' + unavailable.map((p) => p.name).join(', '),
+        409,
+        'padsUnavailable',
+        { unavailablePads: unavailable }
+      );
+    }
+    throw e;
+  }
+}
+
+/** Replace pad locks for a booking (delete old, insert new). Throws on UNIQUE race. */
+export async function setPadLocks(db, bookingId, padIds, startDate, endDate) {
+  await runLockBatch(
+    db,
+    [
+      db.prepare(`DELETE FROM pad_day_locks WHERE booking_id = ?`).bind(bookingId),
+      ...padLockInsertStmts(db, bookingId, padIds, startDate, endDate),
+    ],
+    padIds,
+    startDate,
+    endDate,
+    bookingId
+  );
+}
+
+/**
+ * Atomically replace booking_pads + pad_day_locks so a UNIQUE conflict cannot
+ * leave pad assignments and locks out of sync.
+ */
+async function replacePadsAndLocks(db, bookingId, padIds, startDate, endDate) {
+  const stmts = [
+    db.prepare(`DELETE FROM booking_pads WHERE booking_id = ?`).bind(bookingId),
+    ...padIds.map((pid) =>
+      db.prepare(`INSERT INTO booking_pads (booking_id, pad_id) VALUES (?, ?)`).bind(bookingId, pid)
+    ),
+    db.prepare(`DELETE FROM pad_day_locks WHERE booking_id = ?`).bind(bookingId),
+    ...padLockInsertStmts(db, bookingId, padIds, startDate, endDate),
+  ];
+  await runLockBatch(db, stmts, padIds, startDate, endDate, bookingId);
+}
+
+export async function enrichBooking(db, id) {
+  const b = await db.prepare(`${BOOKING_SELECT} WHERE id = ?`).bind(id).first();
   if (!b) return null;
 
   const { results: padRows } = await db
@@ -67,24 +201,124 @@ async function enrichBooking(db, id) {
     .all();
 
   const pads = padRows || [];
+  const hasOverride =
+    b.priceOverride !== null && b.priceOverride !== undefined && String(b.priceOverride) !== '';
+  const priceTotal = hasOverride ? Number(b.priceOverride) : Number(b.priceTotal);
+
   return {
     ...b,
     allowSelfPickup: !!b.allowSelfPickup,
     allowSelfReturn: !!b.allowSelfReturn,
     paid: !!b.paid,
     doorOpenedForReturn: !!b.doorOpenedForReturn,
+    priceTotal,
+    priceOverride: hasOverride ? b.priceOverride : null,
     padIds: pads.map((p) => p.id),
     pads,
-    openDoor: { showOpenDoor: false, showConfirmReturn: false, mode: null },
+    openDoor: computeOpenDoorFlags(b),
   };
+}
+
+async function bookingIndex(db) {
+  const { results: bpRows } = await db
+    .prepare(`SELECT booking_id AS bookingId, pad_id AS padId FROM booking_pads`)
+    .all();
+  const padsByBooking = {};
+  for (const bp of bpRows || []) {
+    (padsByBooking[bp.bookingId] || (padsByBooking[bp.bookingId] = [])).push(bp.padId);
+  }
+  const { results: pads } = await db.prepare(`SELECT id, name, description FROM pads`).all();
+  const padMap = Object.fromEntries((pads || []).map((p) => [p.id, p]));
+  return { padsByBooking, padMap };
+}
+
+function enrichFromRow(b, index) {
+  const padIds = index.padsByBooking[b.id] || [];
+  const hasOverride =
+    b.priceOverride !== null && b.priceOverride !== undefined && String(b.priceOverride) !== '';
+  const priceTotal = hasOverride ? Number(b.priceOverride) : Number(b.priceTotal);
+  return {
+    id: b.id,
+    bookingNumber: b.bookingNumber,
+    firstName: b.firstName,
+    lastName: b.lastName,
+    email: b.email,
+    phone: b.phone,
+    startDate: b.startDate,
+    endDate: b.endDate,
+    days: Number(b.days),
+    locale: b.locale || 'sv',
+    status: b.status,
+    allowSelfPickup: !!b.allowSelfPickup,
+    allowSelfReturn: !!b.allowSelfReturn,
+    paid: !!b.paid,
+    paidAt: b.paidAt || '',
+    priceBase: Number(b.priceBase) || 0,
+    priceDiscount: Number(b.priceDiscount) || 0,
+    priceTotal,
+    priceOverride: hasOverride ? b.priceOverride : null,
+    priceBreakdownJson: b.priceBreakdownJson || '',
+    doorOpenedForReturn: !!b.doorOpenedForReturn,
+    notes: b.notes || '',
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+    padIds,
+    pads: padIds.map((id) => {
+      const p = index.padMap[id];
+      return p ? { id: p.id, name: p.name, description: p.description } : { id, name: id };
+    }),
+    openDoor: computeOpenDoorFlags(b),
+  };
+}
+
+function computeConflicts(rows, index) {
+  const blocking = rows.filter((b) => BLOCKING_STATUSES[b.status]);
+  const out = {};
+  for (const b of blocking) out[b.id] = [];
+
+  for (let i = 0; i < blocking.length; i++) {
+    for (let j = i + 1; j < blocking.length; j++) {
+      const a = blocking[i];
+      const b = blocking[j];
+      if (!datesOverlap(a.startDate, a.endDate, b.startDate, b.endDate)) continue;
+      const padsA = index.padsByBooking[a.id] || [];
+      const padsB = index.padsByBooking[b.id] || [];
+      const shared = padsA.filter((id) => padsB.includes(id));
+      if (!shared.length) continue;
+      for (const padId of shared) {
+        const pad = index.padMap[padId];
+        const name = pad ? pad.name : padId;
+        out[a.id].push({
+          padId,
+          padName: name,
+          otherId: b.id,
+          otherNumber: b.bookingNumber,
+          otherGuest: (b.firstName + ' ' + b.lastName).trim(),
+          otherStart: b.startDate,
+          otherEnd: b.endDate,
+          otherStatus: b.status,
+        });
+        out[b.id].push({
+          padId,
+          padName: name,
+          otherId: a.id,
+          otherNumber: a.bookingNumber,
+          otherGuest: (a.firstName + ' ' + a.lastName).trim(),
+          otherStart: a.startDate,
+          otherEnd: a.endDate,
+          otherStatus: a.status,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 /**
  * Create a booking request. Availability is enforced by UNIQUE(pad_id, day) on
- * pad_day_locks inside one atomic D1 batch — two concurrent guests picking the
- * same pad cannot both succeed.
+ * pad_day_locks inside one atomic D1 batch.
  */
-export async function submitBooking(env, payload) {
+export async function submitBooking(env, payload, ctx) {
   const db = env.DB;
   const padIds = parsePadIds(payload.padIds);
   const startDate = String(payload.startDate || '');
@@ -102,8 +336,6 @@ export async function submitBooking(env, payload) {
   }
 
   const price = await calculatePrice(db, padIds, startDate, endDate);
-
-  // Fast path: tell the guest which pads are taken before we touch the counter.
   await assertPadsAvailable(db, padIds, startDate, endDate);
 
   const id = uid();
@@ -158,8 +390,7 @@ export async function submitBooking(env, payload) {
   } catch (e) {
     const msg = String(e && e.message ? e.message : e);
     if (/UNIQUE|constraint|already exists/i.test(msg)) {
-      // Race: someone else locked a pad between our check and the batch.
-      const unavailable = await findTakenAfterRace(db, padIds, startDate, endDate, id);
+      const unavailable = await findUnavailablePads(db, padIds, startDate, endDate, id);
       throw softError(
         'Inte längre ledig för valt intervall: ' + unavailable.map((p) => p.name).join(', '),
         409,
@@ -170,6 +401,7 @@ export async function submitBooking(env, payload) {
     throw e;
   }
 
+  await logEvent(db, id, 'created', email, { bookingNumber });
   const cfg = await getConfigMap(db);
   const magicToken = await createMagicToken(db, id);
   const booking = await enrichBooking(db, id);
@@ -180,43 +412,323 @@ export async function submitBooking(env, payload) {
     manageUrl: manageUrl(cfg.pagesBaseUrl, magicToken),
   };
 
-  // Mail is best-effort and must not block the guest response.
-  notifyMail(env, 'bookingCreated', { booking, magicToken }).catch(() => {});
-
+  kick(ctx, mailBookingCreated(env, booking, magicToken));
   return out;
 }
 
-async function findTakenAfterRace(db, padIds, startDate, endDate, excludeBookingId) {
-  const placeholders = padIds.map(() => '?').join(',');
-  const { results } = await db
-    .prepare(
-      `SELECT DISTINCT pad_id AS padId FROM pad_day_locks
-       WHERE pad_id IN (${placeholders}) AND day >= ? AND day <= ?
-         AND booking_id != ?`
-    )
-    .bind(...padIds, startDate, endDate, excludeBookingId)
-    .all();
-  const taken = new Set((results || []).map((r) => r.padId));
-  const { results: pads } = await db
-    .prepare(`SELECT id, name FROM pads WHERE id IN (${placeholders})`)
-    .bind(...padIds)
-    .all();
-  const names = Object.fromEntries((pads || []).map((p) => [p.id, p.name]));
-  return padIds.filter((id) => taken.has(id)).map((id) => ({ id, name: names[id] || id }));
+export async function lookupBooking(env, bookingNumber, email) {
+  const db = env.DB;
+  const num = String(bookingNumber || '').trim();
+  const em = String(email || '').trim().toLowerCase();
+  const found = await db
+    .prepare(`${BOOKING_SELECT} WHERE booking_number = ? AND lower(email) = ?`)
+    .bind(num, em)
+    .first();
+  if (!found) throw softError('Bokning hittades inte', 404);
+  const magicToken = await createMagicToken(db, found.id);
+  const cfg = await getConfigMap(db);
+  return {
+    booking: await enrichBooking(db, found.id),
+    magicToken,
+    manageUrl: manageUrl(cfg.pagesBaseUrl, magicToken),
+  };
 }
 
-/** Optional GAS mail bridge. Set env.MAIL_WEBHOOK_URL to the Apps Script /exec URL. */
-async function notifyMail(env, type, payload) {
-  const url = env.MAIL_WEBHOOK_URL;
-  if (!url) return;
-  await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: 'relayMail',
-      type,
-      payload,
-      secret: env.MAIL_WEBHOOK_SECRET || '',
-    }),
+export async function getBookingByToken(db, token) {
+  const t = await resolveMagicToken(db, token);
+  if (!t) throw softError('Ogiltig eller utgången länk', 401);
+  const booking = await enrichBooking(db, t.booking_id);
+  if (!booking) throw softError('Bokning saknas', 404);
+  return { booking };
+}
+
+export async function guestRequestChange(env, token, payload, ctx) {
+  const db = env.DB;
+  const t = await resolveMagicToken(db, token);
+  if (!t) throw softError('Ogiltig länk', 401);
+  const b = await db.prepare(`SELECT * FROM bookings WHERE id = ?`).bind(t.booking_id).first();
+  if (!b) throw softError('Bokning saknas', 404);
+  if (!['Approved', 'Requested'].includes(b.status)) {
+    throw softError('Ändring kan inte begäras i nuvarande status', 400);
+  }
+
+  const now = nowIso();
+  let padIds = null;
+
+  if (payload.startDate && payload.endDate && payload.padIds) {
+    padIds = parsePadIds(payload.padIds);
+    const price = await calculatePrice(db, padIds, payload.startDate, payload.endDate);
+    await assertPadsAvailable(db, padIds, payload.startDate, payload.endDate, b.id);
+    await replacePadsAndLocks(db, b.id, padIds, payload.startDate, payload.endDate);
+    await db
+      .prepare(
+        `UPDATE bookings SET status = 'ChangePending', start_date = ?, end_date = ?, days = ?,
+         price_base = ?, price_discount = ?, price_total = ?, price_breakdown_json = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        payload.startDate,
+        payload.endDate,
+        price.days,
+        price.priceBase,
+        price.priceDiscount,
+        price.priceTotal,
+        JSON.stringify(price),
+        now,
+        b.id
+      )
+      .run();
+  } else {
+    await db
+      .prepare(`UPDATE bookings SET status = 'ChangePending', updated_at = ? WHERE id = ?`)
+      .bind(now, b.id)
+      .run();
+  }
+
+  await logEvent(db, b.id, 'change_requested', b.email, { requested: payload });
+  const booking = await enrichBooking(db, b.id);
+  kick(ctx, mailAdminChange(env, booking, token));
+  return { booking };
+}
+
+export async function guestCancelBooking(env, token, ctx) {
+  const db = env.DB;
+  const t = await resolveMagicToken(db, token);
+  if (!t) throw softError('Ogiltig länk', 401);
+  const b = await db.prepare(`SELECT * FROM bookings WHERE id = ?`).bind(t.booking_id).first();
+  if (!b) throw softError('Bokning saknas', 404);
+  if (!GUEST_CANCELLABLE_STATUSES.includes(b.status)) {
+    throw softError(
+      'Bokningen kan inte avbokas när den har status ' +
+        statusLabel(b.status, b.locale || 'sv') +
+        '. Kontakta oss om något behöver ändras.',
+      400
+    );
+  }
+  await db
+    .prepare(`UPDATE bookings SET status = 'Cancelled', updated_at = ? WHERE id = ?`)
+    .bind(nowIso(), b.id)
+    .run();
+  await releasePadLocks(db, b.id);
+  await logEvent(db, b.id, 'cancelled', b.email, { by: 'guest' });
+  const booking = await enrichBooking(db, b.id);
+  kick(ctx, mailGuestCancelled(env, booking, token));
+  return { booking };
+}
+
+export async function listBookingsAdmin(db, query) {
+  const { results: all } = await db.prepare(`${BOOKING_SELECT}`).all();
+  const rows = all || [];
+  const number = query && query.bookingNumber ? String(query.bookingNumber).trim().toLowerCase() : '';
+  const status = query && query.status ? String(query.status) : '';
+  const doubleOnly = status === 'DoubleBooked';
+
+  const index = await bookingIndex(db);
+  const conflicts = computeConflicts(rows, index);
+
+  let filtered = rows;
+  if (number) {
+    filtered = filtered.filter((b) => String(b.bookingNumber).toLowerCase().includes(number));
+  }
+  if (status && !doubleOnly) {
+    filtered = filtered.filter((b) => b.status === status);
+  }
+  filtered.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+
+  let list = filtered.map((b) => {
+    const e = enrichFromRow(b, index);
+    e.conflicts = conflicts[b.id] || [];
+    e.doubleBooked = e.conflicts.length > 0;
+    return e;
   });
+  if (doubleOnly) list = list.filter((b) => b.doubleBooked);
+  return list;
+}
+
+export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
+  const db = env.DB;
+  const b = await db.prepare(`SELECT * FROM bookings WHERE id = ?`).bind(bookingId).first();
+  if (!b) throw softError('Bokning saknas', 404);
+
+  const action = payload.op;
+  const now = nowIso();
+  let releaseLocks = false;
+
+  if (action === 'approve') {
+    if (b.status === 'Requested' || b.status === 'ChangePending') {
+      await db
+        .prepare(`UPDATE bookings SET status = 'Approved', updated_at = ? WHERE id = ?`)
+        .bind(now, bookingId)
+        .run();
+    } else {
+      throw softError('Kan inte godkänna i status ' + b.status, 400);
+    }
+  } else if (action === 'reject') {
+    if (b.status === 'Requested') {
+      await db
+        .prepare(`UPDATE bookings SET status = 'Rejected', updated_at = ? WHERE id = ?`)
+        .bind(now, bookingId)
+        .run();
+      releaseLocks = true;
+    } else if (b.status === 'ChangePending') {
+      await db
+        .prepare(`UPDATE bookings SET status = 'Approved', updated_at = ? WHERE id = ?`)
+        .bind(now, bookingId)
+        .run();
+    } else {
+      throw softError('Kan inte avslå i status ' + b.status, 400);
+    }
+  } else if (action === 'handOut') {
+    if (payload.padId) {
+      const nextPads = [String(payload.padId)];
+      const price = await calculatePrice(db, nextPads, b.start_date, b.end_date);
+      await assertPadsAvailable(db, nextPads, b.start_date, b.end_date, bookingId);
+      await replacePadsAndLocks(db, bookingId, nextPads, b.start_date, b.end_date);
+      await db
+        .prepare(
+          `UPDATE bookings SET status = 'HandedOut', price_base = ?, price_discount = ?,
+           price_total = ?, price_breakdown_json = ?, updated_at = ? WHERE id = ?`
+        )
+        .bind(
+          price.priceBase,
+          price.priceDiscount,
+          price.priceTotal,
+          JSON.stringify(price),
+          now,
+          bookingId
+        )
+        .run();
+    } else {
+      await db
+        .prepare(`UPDATE bookings SET status = 'HandedOut', updated_at = ? WHERE id = ?`)
+        .bind(now, bookingId)
+        .run();
+    }
+  } else if (action === 'setPads') {
+    const nextPads = parsePadIds(payload.padIds);
+    if (!nextPads.length) throw softError('Välj minst en utrustning', 400);
+    if (['Returned', 'Cancelled', 'Rejected'].includes(b.status)) {
+      throw softError('Utrustningen kan inte ändras i status ' + b.status, 400);
+    }
+    const nextPrice = await calculatePrice(db, nextPads, b.start_date, b.end_date);
+    if (BLOCKING_STATUSES[b.status]) {
+      await assertPadsAvailable(db, nextPads, b.start_date, b.end_date, bookingId);
+      await replacePadsAndLocks(db, bookingId, nextPads, b.start_date, b.end_date);
+    } else {
+      await db.prepare(`DELETE FROM booking_pads WHERE booking_id = ?`).bind(bookingId).run();
+      await db.batch(
+        nextPads.map((pid) =>
+          db
+            .prepare(`INSERT INTO booking_pads (booking_id, pad_id) VALUES (?, ?)`)
+            .bind(bookingId, pid)
+        )
+      );
+    }
+    await db
+      .prepare(
+        `UPDATE bookings SET price_base = ?, price_discount = ?, price_total = ?,
+         price_breakdown_json = ?, updated_at = ? WHERE id = ?`
+      )
+      .bind(
+        nextPrice.priceBase,
+        nextPrice.priceDiscount,
+        nextPrice.priceTotal,
+        JSON.stringify(nextPrice),
+        now,
+        bookingId
+      )
+      .run();
+  } else if (action === 'return') {
+    await db
+      .prepare(
+        `UPDATE bookings SET status = 'Returned', door_opened_for_return = 0, updated_at = ? WHERE id = ?`
+      )
+      .bind(now, bookingId)
+      .run();
+    releaseLocks = true;
+  } else if (action === 'setPaid') {
+    const paid = !!payload.paid;
+    await db
+      .prepare(`UPDATE bookings SET paid = ?, paid_at = ?, updated_at = ? WHERE id = ?`)
+      .bind(paid ? 1 : 0, paid ? now : null, now, bookingId)
+      .run();
+  } else if (action === 'setFlags') {
+    const pickup =
+      typeof payload.allowSelfPickup !== 'undefined'
+        ? payload.allowSelfPickup
+          ? 1
+          : 0
+        : b.allow_self_pickup;
+    const ret =
+      typeof payload.allowSelfReturn !== 'undefined'
+        ? payload.allowSelfReturn
+          ? 1
+          : 0
+        : b.allow_self_return;
+    await db
+      .prepare(
+        `UPDATE bookings SET allow_self_pickup = ?, allow_self_return = ?, updated_at = ? WHERE id = ?`
+      )
+      .bind(pickup, ret, now, bookingId)
+      .run();
+  } else if (action === 'setPriceOverride') {
+    const ov =
+      payload.priceOverride === null || payload.priceOverride === ''
+        ? null
+        : Number(payload.priceOverride);
+    await db
+      .prepare(`UPDATE bookings SET price_override = ?, updated_at = ? WHERE id = ?`)
+      .bind(ov, now, bookingId)
+      .run();
+  } else if (action === 'setNotes') {
+    await db
+      .prepare(`UPDATE bookings SET notes = ?, updated_at = ? WHERE id = ?`)
+      .bind(String(payload.notes || ''), now, bookingId)
+      .run();
+  } else {
+    throw softError('Okänd action', 400);
+  }
+
+  if (releaseLocks) {
+    await releasePadLocks(db, bookingId);
+  }
+
+  await logEvent(db, bookingId, action, actor.email, payload);
+  const booking = await enrichBooking(db, bookingId);
+  if (action === 'approve' || action === 'reject' || action === 'handOut' || action === 'return') {
+    const magic = await createMagicToken(db, bookingId);
+    kick(ctx, mailGuestStatus(env, booking, magic));
+  }
+  return { booking };
+}
+
+export async function availablePadsForBooking(db, bookingId) {
+  const b = await db.prepare(`SELECT * FROM bookings WHERE id = ?`).bind(bookingId).first();
+  if (!b) throw softError('Bokning saknas', 404);
+
+  const { results: current } = await db
+    .prepare(`SELECT pad_id AS id FROM booking_pads WHERE booking_id = ?`)
+    .bind(bookingId)
+    .all();
+  const assigned = {};
+  for (const r of current || []) assigned[r.id] = true;
+
+  const { results: active } = await db
+    .prepare(
+      `SELECT id, name, description, price_per_day AS pricePerDay
+       FROM pads WHERE active = 1 ORDER BY sort_order, name`
+    )
+    .all();
+  const padIds = (active || []).map((p) => p.id);
+  const unavailable = await findUnavailablePads(db, padIds, b.start_date, b.end_date, bookingId);
+  const taken = new Set(unavailable.map((p) => p.id));
+
+  return (active || []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    pricePerDay: p.pricePerDay,
+    assigned: !!assigned[p.id],
+    available: !taken.has(p.id),
+  }));
 }

@@ -77,3 +77,69 @@ export function parsePadIds(value) {
     return true;
   });
 }
+
+/** YYYY-MM-DD in Europe/Stockholm (same as GAS todayYmd_). */
+export function todayYmd(timeZone = 'Europe/Stockholm') {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+export function datesOverlap(aStart, aEnd, bStart, bEnd) {
+  return String(aStart) <= String(bEnd) && String(bStart) <= String(aEnd);
+}
+
+export const BLOCKING_STATUSES = {
+  Requested: true,
+  Approved: true,
+  ChangePending: true,
+  CancelPending: true,
+  HandedOut: true,
+};
+
+const STATUS_LABELS = {
+  sv: {
+    Requested: 'Förfrågan',
+    Approved: 'Godkänd',
+    Rejected: 'Avslagen',
+    ChangePending: 'Ändring väntar',
+    CancelPending: 'Avbokning väntar',
+    HandedOut: 'Utlämnad',
+    Returned: 'Återlämnad',
+    Cancelled: 'Avbokad',
+  },
+  en: {
+    Requested: 'Requested',
+    Approved: 'Approved',
+    Rejected: 'Rejected',
+    ChangePending: 'Change pending',
+    CancelPending: 'Cancel pending',
+    HandedOut: 'Handed out',
+    Returned: 'Returned',
+    Cancelled: 'Cancelled',
+  },
+  de: {
+    Requested: 'Angefragt',
+    Approved: 'Genehmigt',
+    Rejected: 'Abgelehnt',
+    ChangePending: 'Änderung ausstehend',
+    CancelPending: 'Storno ausstehend',
+    HandedOut: 'Ausgegeben',
+    Returned: 'Zurückgegeben',
+    Cancelled: 'Storniert',
+  },
+};
+
+export function statusLabel(status, locale) {
+  const dict = STATUS_LABELS[locale] || STATUS_LABELS.sv;
+  return dict[status] || status;
+}
+
+/** Fire-and-forget mail / background work; prefer waitUntil when available. */
+export function kick(ctx, promise) {
+  const p = Promise.resolve(promise).catch(() => {});
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
+}

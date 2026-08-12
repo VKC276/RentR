@@ -42,20 +42,21 @@ export async function getCalendar(db, from, to) {
 
 /**
  * Which of the requested pads already have a lock on any day in the range.
- * Returns [{ id, name }].
+ * Returns [{ id, name }]. excludeBookingId ignores that booking's own locks.
  */
-export async function findUnavailablePads(db, padIds, startDate, endDate) {
+export async function findUnavailablePads(db, padIds, startDate, endDate, excludeBookingId) {
   if (!padIds.length) return [];
-  const days = eachDate(startDate, endDate);
+  eachDate(startDate, endDate); // validate
   const placeholders = padIds.map(() => '?').join(',');
-  const { results } = await db
-    .prepare(
-      `SELECT DISTINCT pad_id AS padId FROM pad_day_locks
+  let sql = `SELECT DISTINCT pad_id AS padId FROM pad_day_locks
        WHERE pad_id IN (${placeholders})
-         AND day >= ? AND day <= ?`
-    )
-    .bind(...padIds, startDate, endDate)
-    .all();
+         AND day >= ? AND day <= ?`;
+  const binds = [...padIds, startDate, endDate];
+  if (excludeBookingId) {
+    sql += ` AND booking_id != ?`;
+    binds.push(excludeBookingId);
+  }
+  const { results } = await db.prepare(sql).bind(...binds).all();
 
   if (!results || !results.length) return [];
   const taken = new Set(results.map((r) => r.padId));
@@ -66,8 +67,14 @@ export async function findUnavailablePads(db, padIds, startDate, endDate) {
     .map((id) => ({ id, name: names[id] || id }));
 }
 
-export async function assertPadsAvailable(db, padIds, startDate, endDate) {
-  const unavailable = await findUnavailablePads(db, padIds, startDate, endDate);
+export async function assertPadsAvailable(db, padIds, startDate, endDate, excludeBookingId) {
+  const unavailable = await findUnavailablePads(
+    db,
+    padIds,
+    startDate,
+    endDate,
+    excludeBookingId
+  );
   if (!unavailable.length) return;
   throw softError(
     'Inte längre ledig för valt intervall: ' + unavailable.map((p) => p.name).join(', '),
@@ -75,4 +82,25 @@ export async function assertPadsAvailable(db, padIds, startDate, endDate) {
     'padsUnavailable',
     { unavailablePads: unavailable }
   );
+}
+
+/** Per-pad availability for a date range (legacy getAvailability action). */
+export async function getAvailability(db, startDate, endDate) {
+  const days = eachDate(startDate, endDate).length;
+  const pads = await loadActivePads(db);
+  const padIds = pads.map((p) => p.id);
+  const unavailable = await findUnavailablePads(db, padIds, startDate, endDate);
+  const taken = new Set(unavailable.map((p) => p.id));
+  return {
+    startDate,
+    endDate,
+    days,
+    pads: pads.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      pricePerDay: p.pricePerDay,
+      available: !taken.has(p.id),
+    })),
+  };
 }
