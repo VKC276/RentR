@@ -63,12 +63,13 @@ fi
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "==> Creating $ENV_FILE (set PI_API_KEY!)"
   sudo cp "$DIR/rentr-door.env.example" "$ENV_FILE"
-  sudo chmod 600 "$ENV_FILE"
-  sudo chown root:root "$ENV_FILE"
   echo "    Redigera: sudo nano $ENV_FILE"
 else
   echo "==> Env already exists: $ENV_FILE"
 fi
+# Readable by the service user (not world-readable).
+sudo chown "root:${USER_NAME}" "$ENV_FILE"
+sudo chmod 640 "$ENV_FILE"
 
 # Local convenience copy (ignored by git via root .gitignore .env)
 if [[ ! -f "$DIR/.env" ]]; then

@@ -27,15 +27,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-try:
-    from gpiozero import DigitalOutputDevice  # type: ignore
-
-    HAS_GPIO = True
-except ImportError:
-    DigitalOutputDevice = None  # type: ignore
-    HAS_GPIO = False
-
-
 DEFAULT_API_URL = "https://rentr-api.muddy-rice-38d4.workers.dev"
 USER_AGENT = "VKK-Rental-Pi/2.0"
 
@@ -45,7 +36,12 @@ def load_env_file(path: str | Path) -> None:
     p = Path(path)
     if not p.is_file():
         return
-    for raw in p.read_text(encoding="utf-8").splitlines():
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except PermissionError:
+        print(f"Kan inte läsa {p} (behörighet). Kör som tjänst eller fixa chmod/chown.", file=sys.stderr)
+        return
+    for raw in lines:
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -110,24 +106,34 @@ def api_call(action: str, **extra):
     return data
 
 
+def _load_gpio_device():
+    """Import gpiozero only when needed — import can hang/block on some Pi setups."""
+    from gpiozero import DigitalOutputDevice  # type: ignore
+
+    return DigitalOutputDevice(
+        GPIO_PIN,
+        active_high=RELAY_ACTIVE_HIGH,
+        initial_value=False,
+    )
+
+
 class Relay:
     def __init__(self) -> None:
         self._dev = None
-        if HAS_GPIO:
-            self._dev = DigitalOutputDevice(
-                GPIO_PIN,
-                active_high=RELAY_ACTIVE_HIGH,
-                initial_value=False,
-            )
+        try:
+            self._dev = _load_gpio_device()
             mode = "active-high" if RELAY_ACTIVE_HIGH else "active-low"
-            print(f"GPIO ready on BCM{GPIO_PIN} ({mode})")
-        else:
-            print("gpiozero not available — dry-run mode (no hardware pulse)")
+            print(f"GPIO ready on BCM{GPIO_PIN} ({mode})", flush=True)
+        except ImportError:
+            print("gpiozero not available — dry-run mode (no hardware pulse)", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"GPIO init failed ({exc}) — dry-run mode", flush=True)
+            self._dev = None
 
     def pulse(self, pulse_ms: int) -> None:
         ms = max(50, int(pulse_ms))
         if self._dev is None:
-            print(f"[dry-run] pulse {ms}ms on BCM{GPIO_PIN}")
+            print(f"[dry-run] pulse {ms}ms on BCM{GPIO_PIN}", flush=True)
             time.sleep(ms / 1000.0)
             return
         self._dev.on()
@@ -151,10 +157,10 @@ def main() -> None:
     if not API_URL:
         raise SystemExit("Sätt API_URL till Worker-URL:en")
 
-    print(f"API {API_URL}")
-    print(f"Poll every {POLL_SEC}s · fallback pulse {DEFAULT_PULSE_MS}ms")
+    print(f"API {API_URL}", flush=True)
+    print(f"Poll every {POLL_SEC}s · fallback pulse {DEFAULT_PULSE_MS}ms", flush=True)
     relay = Relay()
-    print("Listening for Open door…")
+    print("Listening for Open door…", flush=True)
 
     try:
         while True:
@@ -164,15 +170,15 @@ def main() -> None:
                 if cmd:
                     cmd_id = cmd.get("id")
                     pulse = int(cmd.get("pulseMs") or DEFAULT_PULSE_MS)
-                    print(f"Command {cmd_id} → pulse {pulse}ms")
+                    print(f"Command {cmd_id} → pulse {pulse}ms", flush=True)
                     relay.pulse(pulse)
                     api_call("completeDoor", commandId=cmd_id)
-                    print(f"Command {cmd_id} marked done")
+                    print(f"Command {cmd_id} marked done", flush=True)
             except Exception as exc:  # noqa: BLE001
-                print(f"Poll error: {exc}", file=sys.stderr)
+                print(f"Poll error: {exc}", file=sys.stderr, flush=True)
             time.sleep(POLL_SEC)
     except KeyboardInterrupt:
-        print("\nStopped")
+        print("\nStopped", flush=True)
     finally:
         relay.close()
 
