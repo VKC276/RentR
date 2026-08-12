@@ -64,7 +64,8 @@
     $('btnBackToPads').textContent = I18n.t('back');
     $('btnSubmit').textContent = I18n.t('submit');
     $('payNote').textContent = I18n.t('payNote');
-    $('thanksTitle').textContent = I18n.t('thanks');
+    $('thanksTitle').textContent = I18n.t('thanksTitle');
+    $('thanksText').textContent = I18n.t('thanks');
     $('lblBookingNo').textContent = I18n.t('bookingNo');
     renderCalendar();
     // The pad cards carry translated text too, and they are built by hand
@@ -541,6 +542,7 @@
       $('stepPads').hidden = true;
       $('stepForm').hidden = true;
       $('stepThanks').hidden = false;
+      $('thanksTitle').textContent = I18n.t('thanksTitle');
       $('thanksText').textContent = I18n.t('thanks');
       $('bookingNumber').textContent = res.bookingNumber;
       $('manageLink').href = res.manageUrl || ('booking.html?t=' + encodeURIComponent(res.magicToken));

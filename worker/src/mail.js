@@ -11,7 +11,7 @@ const APP_NAME = 'RentR';
 const MAIL_I18N = {
   sv: {
     createdSubject: 'Bokningsförfrågan {{bookingNumber}} mottagen',
-    createdIntro: 'Din förfrågan är mottagen och väntar på godkännande.',
+    createdIntro: 'Din förfrågan är mottagen. Vi kommer att återkomma till dig när vi granskat dina önskemål. Har du några funderingar går det bra att mejla oss (info@vastervikclimbing.se).',
     statusSubject: 'Bokning {{bookingNumber}}: {{status}}',
     statusIntro: 'Status för din bokning har uppdaterats.',
     rejectedIntro: 'Din förfrågan har avslagits.',
@@ -45,7 +45,7 @@ const MAIL_I18N = {
   },
   en: {
     createdSubject: 'Booking request {{bookingNumber}} received',
-    createdIntro: 'Your request was received and is waiting for approval.',
+    createdIntro: 'Your request was received. We will get back to you once we have reviewed your wishes. If you have any questions, feel free to email us (info@vastervikclimbing.se).',
     statusSubject: 'Booking {{bookingNumber}}: {{status}}',
     statusIntro: 'The status of your booking has been updated.',
     rejectedIntro: 'Your request has been declined.',
@@ -78,7 +78,7 @@ const MAIL_I18N = {
   },
   de: {
     createdSubject: 'Buchungsanfrage {{bookingNumber}} erhalten',
-    createdIntro: 'Ihre Anfrage wurde erhalten und wartet auf Freigabe.',
+    createdIntro: 'Ihre Anfrage wurde erhalten. Wir melden uns bei Ihnen, sobald wir Ihre Wünsche geprüft haben. Bei Fragen können Sie uns gerne eine E-Mail schreiben (info@vastervikclimbing.se).',
     statusSubject: 'Buchung {{bookingNumber}}: {{status}}',
     statusIntro: 'Der Status Ihrer Buchung wurde aktualisiert.',
     rejectedIntro: 'Ihre Anfrage wurde abgelehnt.',
