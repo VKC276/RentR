@@ -636,9 +636,22 @@
 
     if (canEditPads) {
       html += accordion({
+        title: 'Ändra datum',
+        open: false,
+        lead: 'Flytta bokningens start- och slutdatum. Priset räknas om automatiskt.',
+        body:
+          '<div class="row">' +
+          '<div><label for="edStart">Från</label><input id="edStart" type="date" value="' +
+          escapeHtml(b.startDate) + '" /></div>' +
+          '<div><label for="edEnd">Till</label><input id="edEnd" type="date" value="' +
+          escapeHtml(b.endDate) + '" /></div>' +
+          '</div>' +
+          '<div class="actions"><button type="button" id="actSaveDates">Spara datum</button></div>'
+      });
+      html += accordion({
         title: 'Ändra utrustning',
         open: !!b.doubleBooked,
-        lead: 'Byt vilka pads bokningen gäller.',
+        lead: 'Byt vilken utrustning bokningen gäller.',
         body: '<div class="actions"><button type="button" class="ghost" id="actEditPads">Välj utrustning</button></div>' +
           '<div id="editPadsBox" class="detail-panel" hidden></div>'
       });
@@ -812,6 +825,48 @@
     autoSaveFlag('flagPickup', 'allowSelfPickup');
     autoSaveFlag('flagReturn', 'allowSelfReturn');
 
+    if ($('actSaveDates')) {
+      $('actSaveDates').onclick = function () {
+        var startDate = $('edStart').value;
+        var endDate = $('edEnd').value;
+        var btn = $('actSaveDates');
+        if (!startDate || !endDate) {
+          $('detailErr').hidden = false;
+          $('detailErr').textContent = 'Ange både start- och slutdatum.';
+          return;
+        }
+        if (startDate > endDate) {
+          $('detailErr').hidden = false;
+          $('detailErr').textContent = 'Startdatum måste vara före eller samma som slutdatum.';
+          return;
+        }
+        $('detailErr').hidden = true;
+        api('availablePadsForBooking', {
+          bookingId: b.id,
+          startDate: startDate,
+          endDate: endDate
+        }, btn).then(function (res) {
+          var selected = {};
+          (b.padIds || []).forEach(function (id) { selected[String(id)] = true; });
+          var conflicts = (res.pads || []).filter(function (p) {
+            return selected[String(p.id)] && !p.available;
+          });
+          if (conflicts.length) {
+            $('detailErr').hidden = false;
+            $('detailErr').textContent =
+              'Kan inte spara — vald utrustning är upptagen på nya datumen: ' +
+              conflicts.map(function (p) { return p.name; }).join(', ') +
+              '. Byt utrustning eller välj andra datum.';
+            return;
+          }
+          return act('setDates', { startDate: startDate, endDate: endDate }, btn);
+        }).catch(function (e) {
+          $('detailErr').hidden = false;
+          $('detailErr').textContent = e.message;
+        });
+      };
+    }
+
     if ($('actEditPads')) {
       $('actEditPads').onclick = function () {
         var box = $('editPadsBox');
@@ -819,38 +874,54 @@
         box.innerHTML = '<p><strong>Ändra utrustning</strong></p><p id="epList">Laddar…</p>';
         api('availablePadsForBooking', { bookingId: b.id }, $('actEditPads')).then(function (res) {
           var pads = res.pads || [];
+          var byId = {};
+          pads.forEach(function (p) { byId[String(p.id)] = p; });
           var assigned = {};
           (b.padIds || []).forEach(function (id) { assigned[String(id)] = true; });
           var rows = pads.map(function (p) {
-            var checked = assigned[String(p.id)] ? ' checked' : '';
+            var isAssigned = !!assigned[String(p.id)];
+            var checked = isAssigned ? ' checked' : '';
+            var disabled = !p.available && !isAssigned ? ' disabled' : '';
             var mark;
-            if (assigned[String(p.id)] && !p.available) {
+            if (isAssigned && !p.available) {
               mark = '<span class="badge badge-double">Dubbel</span>';
-            } else if (assigned[String(p.id)]) {
+            } else if (isAssigned) {
               mark = '<span class="badge">Vald</span>';
             } else if (p.available) {
               mark = '<span class="badge paid">Ledig</span>';
             } else {
               mark = '<span class="badge unpaid">Upptagen</span>';
             }
-            return '<label class="check pad-pick">' +
-              '<input type="checkbox" name="epPad" value="' + escapeHtml(p.id) + '"' + checked + '>' +
+            return '<label class="check pad-pick' + (disabled ? ' is-disabled' : '') + '">' +
+              '<input type="checkbox" name="epPad" value="' + escapeHtml(p.id) + '"' +
+              checked + disabled + '>' +
               '<span>' + escapeHtml(p.name) + '</span> ' + mark +
               '</label>';
           }).join('');
           box.innerHTML =
             '<p><strong>Ändra utrustning</strong></p>' +
-            '<p class="muted">Bocka för den utrustning bokningen ska ha. Upptagen betyder att någon annan bokning redan håller den under perioden.</p>' +
+            '<p class="muted">Bocka för ledig utrustning. Upptagen utrustning kan inte väljas. Sparande stoppas om något valt är i konflikt.</p>' +
             '<div class="pad-picks">' + rows + '</div>' +
             '<div class="actions"><button type="button" id="epSave">Spara utrustning</button></div>';
           $('epSave').onclick = function () {
             var ids = [];
+            var conflictNames = [];
             box.querySelectorAll('input[name="epPad"]:checked').forEach(function (el) {
               ids.push(el.value);
+              var p = byId[String(el.value)];
+              if (p && !p.available) conflictNames.push(p.name);
             });
             if (!ids.length) {
               $('detailErr').hidden = false;
               $('detailErr').textContent = 'Välj minst en utrustning.';
+              return;
+            }
+            if (conflictNames.length) {
+              $('detailErr').hidden = false;
+              $('detailErr').textContent =
+                'Kan inte spara — vald utrustning är i konflikt: ' +
+                conflictNames.join(', ') +
+                '. Avmarkera den och välj ledig utrustning.';
               return;
             }
             act('setPads', { padIds: ids }, $('epSave'));
@@ -978,7 +1049,8 @@
   function renderRules(rules) {
     var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Dim</th><th>Min</th><th>%</th><th>Label</th><th></th></tr></thead><tbody>';
     rules.forEach(function (r) {
-      html += '<tr><td>' + r.dimension + '</td><td>' + r.minValue + '</td><td>' + r.percentOff + '</td><td>' + escapeHtml(r.label) +
+      var dimLabel = r.dimension === 'pads' ? 'utrustning' : (r.dimension === 'days' ? 'dygn' : r.dimension);
+      html += '<tr><td>' + escapeHtml(dimLabel) + '</td><td>' + r.minValue + '</td><td>' + r.percentOff + '</td><td>' + escapeHtml(r.label) +
         '</td><td><button type="button" class="ghost" data-del-rule="' + r.id + '">Ta bort</button></td></tr>';
     });
     html += '</tbody></table></div>';

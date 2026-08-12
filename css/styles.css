@@ -1016,6 +1016,10 @@ body.modal-open { overflow: hidden; }
   background: #fff;
 }
 .pad-pick input { width: auto; margin: 0; }
+.pad-pick.is-disabled {
+  opacity: 0.55;
+  background: rgba(0, 0, 0, 0.03);
+}
 .status-bar {
   position: fixed;
   left: 50%;

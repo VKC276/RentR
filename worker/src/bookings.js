@@ -751,8 +751,8 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       throw softError('Utrustningen kan inte ändras i status ' + b.status, 400);
     }
     const nextPrice = await calculatePrice(db, nextPads, b.start_date, b.end_date);
+    await assertPadsAvailable(db, nextPads, b.start_date, b.end_date, bookingId);
     if (BLOCKING_STATUSES[b.status]) {
-      await assertPadsAvailable(db, nextPads, b.start_date, b.end_date, bookingId);
       await replacePadsAndLocks(db, bookingId, nextPads, b.start_date, b.end_date);
     } else {
       await db.prepare(`DELETE FROM booking_pads WHERE booking_id = ?`).bind(bookingId).run();
@@ -770,6 +770,43 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
          price_breakdown_json = ?, updated_at = ? WHERE id = ?`
       )
       .bind(
+        nextPrice.priceBase,
+        nextPrice.priceDiscount,
+        nextPrice.priceTotal,
+        JSON.stringify(nextPrice),
+        now,
+        bookingId
+      )
+      .run();
+  } else if (action === 'setDates') {
+    const startDate = String(payload.startDate || '').trim();
+    const endDate = String(payload.endDate || '').trim();
+    if (['Returned', 'Cancelled', 'Rejected'].includes(b.status)) {
+      throw softError('Datum kan inte ändras i status ' + b.status, 400);
+    }
+    // Validates format and start <= end.
+    calcDays(startDate, endDate);
+    const { results: padRows } = await db
+      .prepare(`SELECT pad_id AS id FROM booking_pads WHERE booking_id = ?`)
+      .bind(bookingId)
+      .all();
+    const padIds = (padRows || []).map((r) => r.id);
+    if (!padIds.length) throw softError('Bokningen saknar utrustning', 400);
+    const nextPrice = await calculatePrice(db, padIds, startDate, endDate);
+    await assertPadsAvailable(db, padIds, startDate, endDate, bookingId);
+    if (BLOCKING_STATUSES[b.status]) {
+      await setPadLocks(db, bookingId, padIds, startDate, endDate);
+    }
+    await db
+      .prepare(
+        `UPDATE bookings SET start_date = ?, end_date = ?, days = ?,
+         price_base = ?, price_discount = ?, price_total = ?,
+         price_breakdown_json = ?, updated_at = ? WHERE id = ?`
+      )
+      .bind(
+        startDate,
+        endDate,
+        nextPrice.days,
         nextPrice.priceBase,
         nextPrice.priceDiscount,
         nextPrice.priceTotal,
@@ -897,9 +934,13 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
   return { booking };
 }
 
-export async function availablePadsForBooking(db, bookingId) {
+export async function availablePadsForBooking(db, bookingId, opts) {
   const b = await db.prepare(`SELECT * FROM bookings WHERE id = ?`).bind(bookingId).first();
   if (!b) throw softError('Bokning saknas', 404);
+
+  const startDate = String((opts && opts.startDate) || b.start_date || '').trim();
+  const endDate = String((opts && opts.endDate) || b.end_date || '').trim();
+  calcDays(startDate, endDate);
 
   const { results: current } = await db
     .prepare(`SELECT pad_id AS id FROM booking_pads WHERE booking_id = ?`)
@@ -915,7 +956,7 @@ export async function availablePadsForBooking(db, bookingId) {
     )
     .all();
   const padIds = (active || []).map((p) => p.id);
-  const unavailable = await findUnavailablePads(db, padIds, b.start_date, b.end_date, bookingId);
+  const unavailable = await findUnavailablePads(db, padIds, startDate, endDate, bookingId);
   const taken = new Set(unavailable.map((p) => p.id));
 
   return (active || []).map((p) => ({

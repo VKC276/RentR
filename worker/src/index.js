@@ -164,7 +164,12 @@ async function route(env, action, body, ctx) {
       return saveAdminConfig(env.DB, body);
     case 'availablePadsForBooking':
       await requireAdmin(env, sessionToken);
-      return { pads: await availablePadsForBooking(env.DB, body.bookingId) };
+      return {
+        pads: await availablePadsForBooking(env.DB, body.bookingId, {
+          startDate: body.startDate,
+          endDate: body.endDate,
+        }),
+      };
     case 'listUsers':
       await requireAdmin(env, sessionToken);
       return { users: await listUsers(env.DB) };
