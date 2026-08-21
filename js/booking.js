@@ -100,6 +100,14 @@
     return html;
   }
 
+  function renderPriceBox(b) {
+    if (b.paid) {
+      return '<div class="price-box"><span class="badge paid">' + escapeHtml(I18n.t('paidLabel')) + '</span></div>';
+    }
+    return '<div class="price-box"><strong>' + I18n.t('total') + ': ' + b.priceTotal + ' SEK</strong>' +
+      '<div class="muted">' + I18n.t('payNote') + '</div></div>';
+  }
+
   function render() {
     var b = booking;
     var od = b.openDoor || {};
@@ -109,7 +117,7 @@
     html += '<p>' + escapeHtml(b.firstName + ' ' + b.lastName) + ' · ' + escapeHtml(b.email) + ' · ' + escapeHtml(b.phone) + '</p>';
     html += '<p>' + escapeHtml(I18n.t('daysExplain', { start: b.startDate, end: b.endDate, days: b.days })) + '</p>';
     html += '<p>' + escapeHtml((b.pads || []).map(function (p) { return p.name; }).join(', ')) + '</p>';
-    html += '<div class="price-box"><strong>' + I18n.t('total') + ': ' + b.priceTotal + ' SEK</strong><div class="muted">' + I18n.t('payNote') + '</div></div>';
+    html += renderPriceBox(b);
 
     html += renderDoorControls(od);
 
