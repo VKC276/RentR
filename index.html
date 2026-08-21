@@ -83,25 +83,27 @@
 
     <div class="panel" id="stepForm" hidden>
       <h2 id="titleForm">Details</h2>
-      <div class="row">
-        <div><label id="lblFirst">First</label><input id="firstName" required /></div>
-        <div><label id="lblLast">Last</label><input id="lastName" required /></div>
-      </div>
-      <div class="row">
-        <div><label id="lblEmail">Email</label><input id="email" type="email" required /></div>
-        <div><label id="lblPhone">Phone</label><input id="phone" required /></div>
-      </div>
-      <div>
-        <label id="lblNotes">Notes</label>
-        <textarea id="notes" rows="3"></textarea>
-      </div>
-      <div class="price-box" id="priceBox"></div>
-      <p class="muted" id="payNote"></p>
-      <p style="margin-top:1rem;">
-        <button type="button" class="ghost" id="btnBackToPads">Back</button>
-        <button type="button" id="btnSubmit">Submit</button>
-      </p>
-      <p class="err" id="errForm" hidden></p>
+      <form id="bookingForm" novalidate>
+        <div class="row">
+          <div><label id="lblFirst" for="firstName">First</label><input id="firstName" name="firstName" autocomplete="given-name" required /></div>
+          <div><label id="lblLast" for="lastName">Last</label><input id="lastName" name="lastName" autocomplete="family-name" required /></div>
+        </div>
+        <div class="row">
+          <div><label id="lblEmail" for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" inputmode="email" required /></div>
+          <div><label id="lblPhone" for="phone">Phone</label><input id="phone" name="phone" type="tel" autocomplete="tel" required /></div>
+        </div>
+        <div>
+          <label id="lblNotes" for="notes">Notes</label>
+          <textarea id="notes" name="notes" rows="3"></textarea>
+        </div>
+        <div class="price-box" id="priceBox"></div>
+        <p class="muted" id="payNote"></p>
+        <p style="margin-top:1rem;">
+          <button type="button" class="ghost" id="btnBackToPads">Back</button>
+          <button type="submit" id="btnSubmit">Submit</button>
+        </p>
+        <p class="err" id="errForm" hidden></p>
+      </form>
     </div>
 
     <div class="panel" id="stepThanks" hidden>
@@ -113,10 +115,10 @@
   </div>
 
   <script src="js/config.js?v=20260821b"></script>
-  <script src="js/i18n.js?v=20260821b"></script>
+  <script src="js/i18n.js?v=20260822a"></script>
   <script src="js/pricing.js?v=20260821b"></script>
   <script src="js/api.js?v=20260821b"></script>
   <script src="js/status.js?v=20260821b"></script>
-  <script src="js/app.js?v=20260821b"></script>
+  <script src="js/app.js?v=20260822a"></script>
 </body>
 </html>

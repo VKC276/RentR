@@ -6,6 +6,12 @@ export function softError(message, status = 400, code, details) {
   return err;
 }
 
+export function isValidEmail(value) {
+  const s = String(value || '').trim();
+  if (!s) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
 export function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,

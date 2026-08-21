@@ -307,13 +307,14 @@ export async function sendMessages(env, messages) {
     console.error('MAIL_WEBHOOK_URL saknas — inga mejl skickas');
     return;
   }
-  if (!messages || !messages.length) return;
+  const out = (messages || []).filter((m) => m && String(m.to || '').trim());
+  if (!out.length) return;
 
   try {
     await postMailWebhook(url, {
       action: 'relayMail',
       secret: env.MAIL_WEBHOOK_SECRET || '',
-      messages,
+      messages: out,
     });
   } catch (err) {
     console.error('Kunde inte skicka mejl', String(err && err.message ? err.message : err));

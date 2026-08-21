@@ -13,6 +13,7 @@ import {
   kick,
   normalizeHm,
   isWithinHmWindow,
+  isValidEmail,
 } from './util.js';
 import { calculatePrice } from './pricing.js';
 import { getConfigMap, closedBookingRetentionMonths, CLOSED_BOOKING_STATUSES } from './config.js';
@@ -535,6 +536,9 @@ export async function submitBooking(env, payload, ctx) {
   if (!firstName || !lastName || !email || !phone) {
     throw softError('Förnamn, efternamn, e-post och telefon krävs', 400);
   }
+  if (!isValidEmail(email)) {
+    throw softError('Ange en giltig e-postadress', 400);
+  }
 
   const price = await calculatePrice(db, padIds, startDate, endDate);
   await assertPadsAvailable(db, padIds, startDate, endDate);
@@ -616,7 +620,9 @@ export async function submitBooking(env, payload, ctx) {
     manageUrl: manageUrl(cfg.pagesBaseUrl, magicToken),
   };
 
-  kick(ctx, mailBookingCreated(env, booking, magicToken));
+  if (isValidEmail(email)) {
+    kick(ctx, mailBookingCreated(env, booking, magicToken));
+  }
   return out;
 }
 

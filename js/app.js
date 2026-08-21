@@ -126,6 +126,64 @@
     updateSummaryPrice();
   }
 
+  function isValidEmail(value) {
+    var s = String(value || '').trim();
+    if (!s) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+
+  function validateBookingForm() {
+    var form = $('bookingForm');
+    var firstName = $('firstName').value.trim();
+    var lastName = $('lastName').value.trim();
+    var email = $('email').value.trim();
+    var phone = $('phone').value.trim();
+
+    $('firstName').setCustomValidity('');
+    $('lastName').setCustomValidity('');
+    $('email').setCustomValidity('');
+    $('phone').setCustomValidity('');
+
+    if (!firstName) {
+      $('firstName').setCustomValidity(I18n.t('formRequired'));
+      form.reportValidity();
+      $('firstName').focus();
+      return { error: I18n.t('formRequired') };
+    }
+    if (!lastName) {
+      $('lastName').setCustomValidity(I18n.t('formRequired'));
+      form.reportValidity();
+      $('lastName').focus();
+      return { error: I18n.t('formRequired') };
+    }
+    if (!email) {
+      $('email').setCustomValidity(I18n.t('formRequired'));
+      form.reportValidity();
+      $('email').focus();
+      return { error: I18n.t('formRequired') };
+    }
+    if (!isValidEmail(email)) {
+      $('email').setCustomValidity(I18n.t('formInvalidEmail'));
+      form.reportValidity();
+      $('email').focus();
+      return { error: I18n.t('formInvalidEmail') };
+    }
+    if (!phone) {
+      $('phone').setCustomValidity(I18n.t('formRequired'));
+      form.reportValidity();
+      $('phone').focus();
+      return { error: I18n.t('formRequired') };
+    }
+
+    return {
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      phone: phone,
+      notes: $('notes').value.trim()
+    };
+  }
+
   function showErr(id, msg) {
     var el = $(id);
     if (!msg) { el.hidden = true; el.textContent = ''; return; }
@@ -516,24 +574,26 @@
     scrollToEl($('stepPads'));
   });
 
-  $('btnSubmit').addEventListener('click', function () {
+  $('bookingForm').addEventListener('submit', function (e) {
+    e.preventDefault();
     showErr('errForm');
     if (!state.selected.length || !state.startDate || !state.endDate) return;
+    var contact = validateBookingForm();
+    if (!contact || contact.error || !contact.email) {
+      showErr('errForm', (contact && contact.error) || I18n.t('formRequired'));
+      return;
+    }
     var payload = {
       padIds: state.selected.slice(),
       startDate: state.startDate,
       endDate: state.endDate,
-      firstName: $('firstName').value.trim(),
-      lastName: $('lastName').value.trim(),
-      email: $('email').value.trim(),
-      phone: $('phone').value.trim(),
-      notes: $('notes').value.trim(),
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      email: contact.email,
+      phone: contact.phone,
+      notes: contact.notes,
       locale: I18n.getLocale()
     };
-    if (!payload.firstName || !payload.lastName || !payload.email || !payload.phone) {
-      showErr('errForm', I18n.t('error'));
-      return;
-    }
     Status.button($('btnSubmit'), I18n.t('busySubmit'), Api.call('submitBooking', payload)).then(function (res) {
       forgetStoredMonths();
       $('conflictAlert').hidden = true;
