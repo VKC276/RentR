@@ -8,7 +8,7 @@
  */
 
 /** Product name. The Config key appName overrides it per installation. */
-var APP_NAME = 'VKK Rental';
+var APP_NAME = 'ClimbLink';
 
 function doGet(e) {
   e = e || { parameter: {} };

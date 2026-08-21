@@ -4,13 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="/" />
-  <title>VKK Rental — Find booking</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260812b" />
+  <title>ClimbLink — Find booking</title>
+  <link rel="stylesheet" href="css/styles.css?v=20260821b" />
 </head>
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div class="brand"><a href="index.html" id="brand">VKK Rental</a></div>
+      <a class="brand" href="index.html">
+        <img class="brand-logo" src="media/logga.png" alt="" />
+        <span class="brand-name">ClimbLink</span>
+      </a>
       <div id="lang"></div>
     </div>
     <div class="panel">
@@ -24,14 +27,13 @@
       <div id="result" hidden></div>
     </div>
   </div>
-  <script src="js/config.js?v=20260812b"></script>
-  <script src="js/i18n.js?v=20260812b"></script>
-  <script src="js/api.js?v=20260812b"></script>
-  <script src="js/status.js?v=20260812b"></script>
+  <script src="js/config.js?v=20260821b"></script>
+  <script src="js/i18n.js?v=20260821b"></script>
+  <script src="js/api.js?v=20260821b"></script>
+  <script src="js/status.js?v=20260821b"></script>
   <script>
     function apply() {
       I18n.renderLangSwitcher(document.getElementById('lang'));
-      document.getElementById('brand').textContent = I18n.t('appName');
       document.title = I18n.t('appName') + ' — ' + I18n.t('lookupTitle');
       document.getElementById('title').textContent = I18n.t('lookupTitle');
       document.getElementById('lblNo').textContent = I18n.t('bookingNo');

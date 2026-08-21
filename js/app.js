@@ -47,7 +47,6 @@
 
   function applyI18n() {
     I18n.renderLangSwitcher($('lang'));
-    $('brand').textContent = I18n.t('appName');
     document.title = I18n.t('appName') + ' — ' + I18n.t('book');
     $('navFind').textContent = I18n.t('find');
     $('titleBook').textContent = I18n.t('book');
@@ -145,8 +144,7 @@
     });
   }
 
-  // The product name is the same everywhere, so the brand comes from i18n and
-  // not from the config the API happens to return.
+  // The wordmark is in the HTML (logo + ClimbLink). Titles still use i18n.
   function useConfig(cfg) {
     state.config = cfg;
   }

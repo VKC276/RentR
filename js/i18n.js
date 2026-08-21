@@ -1,7 +1,7 @@
 (function (global) {
   var STR = {
     sv: {
-      appName: 'VKK Rental',
+      appName: 'ClimbLink',
       book: 'Boka',
       find: 'Hitta bokning',
       admin: 'Admin',
@@ -128,7 +128,7 @@
       busyRetry: 'Google svarade inte — försöker igen…'
     },
     en: {
-      appName: 'VKK Rental',
+      appName: 'ClimbLink',
       book: 'Book',
       find: 'Find booking',
       admin: 'Admin',
@@ -255,7 +255,7 @@
       busyRetry: 'Google did not respond — retrying…'
     },
     de: {
-      appName: 'VKK Rental',
+      appName: 'ClimbLink',
       book: 'Buchen',
       find: 'Buchung finden',
       admin: 'Admin',
