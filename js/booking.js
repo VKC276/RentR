@@ -102,7 +102,7 @@
 
   function renderPriceBox(b) {
     if (b.paid) {
-      return '<div class="price-box"><span class="badge paid">' + escapeHtml(I18n.t('paidLabel')) + '</span></div>';
+      return '<div class="price-box"><strong>' + escapeHtml(I18n.t('paidLabel')) + '</strong></div>';
     }
     return '<div class="price-box"><strong>' + I18n.t('total') + ': ' + b.priceTotal + ' SEK</strong>' +
       '<div class="muted">' + I18n.t('payNote') + '</div></div>';
