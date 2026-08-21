@@ -440,7 +440,6 @@ export async function mailDoorPass(env, pass, url) {
       label: t(locale, 'labelValid'),
       value: `${pass.startDate} – ${pass.endDate} · ${pass.startTime || '06:00'}–${pass.endTime || '22:00'}`,
     }],
-    notes: [t(locale, 'daysNote')],
     ctaLabel: t(locale, 'labelOpen'),
     ctaUrl: url,
   });
