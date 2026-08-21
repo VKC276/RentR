@@ -46,6 +46,8 @@ import {
   createAndSendDoorPass,
   listDoorPasses,
   revokeDoorPass,
+  deleteDoorPass,
+  purgeExpiredDoorPasses,
 } from './door.js';
 import { adminOverview } from './admin.js';
 
@@ -123,6 +125,9 @@ async function route(env, action, body, ctx) {
     case 'revokeDoorPass':
       await requireAdmin(env, sessionToken);
       return revokeDoorPass(env.DB, body.passId || body.id);
+    case 'deleteDoorPass':
+      await requireAdmin(env, sessionToken);
+      return deleteDoorPass(env.DB, body.passId || body.id);
 
     case 'login':
       return loginAdmin(env, body.email, body.password);
@@ -232,5 +237,6 @@ export default {
   },
   async scheduled(event, env, ctx) {
     kick(ctx, purgeOldClosedBookings(env.DB));
+    kick(ctx, purgeExpiredDoorPasses(env.DB));
   },
 };

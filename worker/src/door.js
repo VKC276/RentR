@@ -13,7 +13,7 @@ import {
   normalizeHm,
   isWithinHmWindow,
 } from './util.js';
-import { getConfigMap } from './config.js';
+import { getConfigMap, closedBookingRetentionMonths } from './config.js';
 import { enrichBooking, resolveMagicToken, logEvent, releasePadLocks } from './bookings.js';
 import { mailDoorPass } from './mail.js';
 
@@ -334,4 +334,47 @@ export async function revokeDoorPass(db, passId) {
   if (!pass) throw softError('Dörrlänk saknas', 404);
   await db.prepare(`UPDATE door_passes SET revoked = 1 WHERE id = ?`).bind(passId).run();
   return { ok: true };
+}
+
+async function deleteDoorPassRow(db, passId) {
+  await db.prepare(`DELETE FROM door_commands WHERE booking_id = ?`).bind(passId).run();
+  await db.prepare(`DELETE FROM door_passes WHERE id = ?`).bind(passId).run();
+}
+
+export async function deleteDoorPass(db, passId) {
+  const pass = await db
+    .prepare(`SELECT id, revoked FROM door_passes WHERE id = ?`)
+    .bind(passId)
+    .first();
+  if (!pass) throw softError('Dörrlänk saknas', 404);
+  if (!pass.revoked) throw softError('Återkalla länken innan den raderas', 400);
+  await deleteDoorPassRow(db, passId);
+  return { ok: true };
+}
+
+function monthsAgoYmd(months) {
+  const parts = todayYmd().split('-');
+  const dt = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+  dt.setUTCMonth(dt.getUTCMonth() - months);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Remove door passes whose validity ended more than the configured retention ago. */
+export async function purgeExpiredDoorPasses(db) {
+  const cfg = await getConfigMap(db);
+  const months = closedBookingRetentionMonths(cfg);
+  if (months === 0) return { deleted: 0, months: 0, disabled: true };
+
+  const cutoff = monthsAgoYmd(months);
+  const { results } = await db
+    .prepare(`SELECT id FROM door_passes WHERE end_date < ?`)
+    .bind(cutoff)
+    .all();
+
+  let deleted = 0;
+  for (const row of results || []) {
+    await deleteDoorPassRow(db, row.id);
+    deleted++;
+  }
+  return { deleted, months, cutoff };
 }

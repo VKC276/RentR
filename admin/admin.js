@@ -69,7 +69,8 @@
     changePassword: 'Byter lösenord…',
     listDoorPasses: 'Hämtar dörrlänkar…',
     createDoorPass: 'Skickar dörrlänk…',
-    revokeDoorPass: 'Spärrar dörrlänk…'
+    revokeDoorPass: 'Spärrar dörrlänk…',
+    deleteDoorPass: 'Raderar dörrlänk…'
   };
 
   function api(action, payload, btn, busyLabel) {
@@ -1260,6 +1261,9 @@
     html += '<p>Öppen kl ' + escapeHtml(p.startTime || '06:00') + '–' + escapeHtml(p.endTime || '22:00') + '</p>';
     if (!p.revoked) {
       html += '<div class="actions"><button type="button" class="ghost" id="passRevoke">Återkalla länken</button></div>';
+    } else {
+      html += '<p class="muted">Länken är spärrad. Radera den för att ta bort den från listan.</p>';
+      html += '<div class="actions"><button type="button" class="warn" id="passDelete">Radera länken</button></div>';
     }
     html += '<p class="err" id="passErr" hidden></p>';
     $('passDetail').innerHTML = html;
@@ -1271,6 +1275,18 @@
           return refreshAll();
         }).then(function () {
           openPass(p.id);
+        }).catch(function (e) {
+          $('passErr').hidden = false;
+          $('passErr').textContent = e.message;
+        });
+      };
+    }
+    if ($('passDelete')) {
+      $('passDelete').onclick = function () {
+        if (!confirm('Radera dörrlänken till ' + p.recipientName + ' permanent? Detta kan inte ångras.')) return;
+        api('deleteDoorPass', { passId: p.id }, $('passDelete')).then(function () {
+          closePass();
+          return refreshAll();
         }).catch(function (e) {
           $('passErr').hidden = false;
           $('passErr').textContent = e.message;
