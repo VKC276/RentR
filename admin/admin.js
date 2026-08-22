@@ -70,7 +70,8 @@
     listDoorPasses: 'Hämtar dörrlänkar…',
     createDoorPass: 'Skickar dörrlänk…',
     revokeDoorPass: 'Spärrar dörrlänk…',
-    deleteDoorPass: 'Raderar dörrlänk…'
+    deleteDoorPass: 'Raderar dörrlänk…',
+    getRentalStats: 'Hämtar statistik…'
   };
 
   function api(action, payload, btn, busyLabel) {
@@ -102,7 +103,7 @@
     el.hidden = !el.textContent;
   }
 
-  var VIEWS = { bookings: true, doorpass: true, settings: true };
+  var VIEWS = { bookings: true, doorpass: true, settings: true, stats: true };
 
   function currentView() {
     var hash = (location.hash || '').replace(/^#/, '');
@@ -121,6 +122,7 @@
     if (location.hash !== '#' + view) {
       history.replaceState(null, '', '#' + view);
     }
+    if (view === 'stats') loadStats();
   }
 
   window.addEventListener('hashchange', function () {
@@ -1229,6 +1231,96 @@
     if (p.revoked) return 'Återkallad';
     return p.validToday ? 'Gäller idag' : 'Utanför period';
   }
+
+  function statsFilterPayload() {
+    return {
+      year: $('statsYear').value,
+      month: $('statsMonth').value,
+      padId: $('statsPad').value,
+      from: $('statsFrom').value,
+      to: $('statsTo').value
+    };
+  }
+
+  function fillStatsFilterOptions(res) {
+    var yearSel = $('statsYear');
+    var padSel = $('statsPad');
+    var yearVal = yearSel.value;
+    var padVal = padSel.value;
+    var years = res.years || [];
+    yearSel.innerHTML = '<option value="">Alla år</option>' + years.map(function (y) {
+      return '<option value="' + y + '">' + y + '</option>';
+    }).join('');
+    if (yearVal) yearSel.value = yearVal;
+
+    var pads = res.padOptions || [];
+    padSel.innerHTML = '<option value="">Alla resurser</option>' + pads.map(function (p) {
+      return '<option value="' + escapeHtml(p.padId) + '">' + escapeHtml(p.padName) + '</option>';
+    }).join('');
+    if (padVal) padSel.value = padVal;
+  }
+
+  function formatSek(n) {
+    return (Math.round(Number(n) * 100) / 100).toLocaleString('sv-SE') + ' SEK';
+  }
+
+  function renderStats(res) {
+    fillStatsFilterOptions(res);
+    var pads = res.pads || [];
+    var totals = res.totals || {};
+    $('statsTotals').hidden = false;
+    $('statsTotalBookings').textContent = String(totals.bookings || 0);
+    $('statsTotalDays').textContent = String(totals.rentalDays || 0);
+    $('statsTotalAmount').textContent = formatSek(totals.amount || 0);
+
+    var body = $('statsBody');
+    if (!pads.length) {
+      body.innerHTML = '';
+      $('statsEmpty').hidden = false;
+      return;
+    }
+    $('statsEmpty').hidden = true;
+    body.innerHTML = pads.map(function (p) {
+      return '<tr>' +
+        '<td>' + escapeHtml(p.padName) + '</td>' +
+        '<td class="num">' + p.bookings + '</td>' +
+        '<td class="num">' + p.rentalDays + '</td>' +
+        '<td class="num">' + formatSek(p.amount) + '</td>' +
+        '</tr>';
+    }).join('') +
+      '<tr>' +
+      '<td><strong>Totalt (filter)</strong></td>' +
+      '<td class="num"><strong>' + (totals.bookings || 0) + '</strong></td>' +
+      '<td class="num"><strong>' + (totals.rentalDays || 0) + '</strong></td>' +
+      '<td class="num"><strong>' + formatSek(totals.amount || 0) + '</strong></td>' +
+      '</tr>';
+  }
+
+  function loadStats() {
+    if (!requireSession()) return Promise.resolve();
+    $('statsErr').hidden = true;
+    return api('getRentalStats', statsFilterPayload(), $('btnStatsApply')).then(function (res) {
+      renderStats(res);
+    }).catch(function (e) {
+      if (e.status === 401) showLogin(true);
+      else {
+        $('statsErr').hidden = false;
+        $('statsErr').textContent = e.message || 'Kunde inte hämta statistik';
+      }
+    });
+  }
+
+  $('btnStatsApply').onclick = function () {
+    loadStats();
+  };
+  $('btnStatsClear').onclick = function () {
+    $('statsYear').value = '';
+    $('statsMonth').value = '';
+    $('statsPad').value = '';
+    $('statsFrom').value = '';
+    $('statsTo').value = '';
+    loadStats();
+  };
 
   function renderPasses(list) {
     passes = list;

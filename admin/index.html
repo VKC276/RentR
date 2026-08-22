@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="/" />
   <title>ClimbLink — Admin</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260821b" />
+  <link rel="stylesheet" href="css/styles.css?v=20260822d" />
 </head>
 <body>
   <div class="wrap">
@@ -19,6 +19,7 @@
         <nav class="nav" id="nav" hidden>
           <a href="#bookings" data-view="bookings" class="is-active">Bokningar</a>
           <a href="#doorpass" data-view="doorpass">Dörrlänk</a>
+          <a href="#stats" data-view="stats">Statistik</a>
           <a href="#settings" data-view="settings">Inställningar</a>
           <a href="#" id="logout">Logga ut</a>
         </nav>
@@ -92,6 +93,80 @@
         <p class="muted" id="dpEmpty" hidden>Inga länkar har skickats.</p>
       </div>
 
+      <div class="panel admin-view" id="statsSection" data-view="stats" hidden>
+        <h2>Statistik</h2>
+        <p class="muted">Uthyrda dygn och intäkt per resurs för återlämnade bokningar. Data sparas anonymiserat och finns kvar även när bokningar raderas enligt GDPR.</p>
+        <div class="row">
+          <div>
+            <label>År</label>
+            <select id="statsYear">
+              <option value="">Alla år</option>
+            </select>
+          </div>
+          <div>
+            <label>Månad</label>
+            <select id="statsMonth">
+              <option value="">Alla månader</option>
+              <option value="1">Januari</option>
+              <option value="2">Februari</option>
+              <option value="3">Mars</option>
+              <option value="4">April</option>
+              <option value="5">Maj</option>
+              <option value="6">Juni</option>
+              <option value="7">Juli</option>
+              <option value="8">Augusti</option>
+              <option value="9">September</option>
+              <option value="10">Oktober</option>
+              <option value="11">November</option>
+              <option value="12">December</option>
+            </select>
+          </div>
+          <div>
+            <label>Resurs</label>
+            <select id="statsPad">
+              <option value="">Alla resurser</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div><label>Från datum</label><input id="statsFrom" type="date" /></div>
+          <div><label>Till datum</label><input id="statsTo" type="date" /></div>
+        </div>
+        <p class="stats-actions">
+          <button type="button" id="btnStatsApply">Tillämpa filter</button>
+          <button type="button" class="ghost" id="btnStatsClear">Rensa filter</button>
+        </p>
+        <p class="err" id="statsErr" hidden></p>
+        <div class="stats-totals" id="statsTotals" hidden>
+          <div class="stats-total-item">
+            <span class="muted">Bokningar</span>
+            <strong id="statsTotalBookings">0</strong>
+          </div>
+          <div class="stats-total-item">
+            <span class="muted">Uthyrda dygn</span>
+            <strong id="statsTotalDays">0</strong>
+          </div>
+          <div class="stats-total-item">
+            <span class="muted">Total intäkt</span>
+            <strong id="statsTotalAmount">0 SEK</strong>
+          </div>
+        </div>
+        <div class="stats-table-wrap">
+          <table class="stats-table" id="statsTable">
+            <thead>
+              <tr>
+                <th>Resurs</th>
+                <th class="num">Bokningar</th>
+                <th class="num">Uthyrda dygn</th>
+                <th class="num">Intäkt</th>
+              </tr>
+            </thead>
+            <tbody id="statsBody"></tbody>
+          </table>
+        </div>
+        <p class="muted" id="statsEmpty" hidden>Ingen statistik matchar filtret.</p>
+      </div>
+
       <div class="admin-view" id="settingsView" data-view="settings" hidden>
       <div class="panel settings-panel">
         <h2>Inställningar</h2>
@@ -101,7 +176,7 @@
           <summary>System</summary>
           <div class="settings-block-body">
             <h3>Autorensning</h3>
-            <p class="muted">Avslutade bokningar (återlämnade, avbokade, avslagna) och dörrlänkar som passerat giltighetstiden raderas automatiskt efter angiven tid. Autorensning körs dagligen och när admin öppnas.</p>
+            <p class="muted">Avslutade bokningar (återlämnade, avbokade, avslagna) och dörrlänkar som passerat giltighetstiden raderas automatiskt efter angiven tid. Autorensning körs dagligen och när admin öppnas. Anonymiserad uthyrningsstatistik behålls.</p>
             <div class="row">
               <div><label>Behåll avslutade (månader)</label><input id="cfgRetentionMonths" type="number" min="0" max="120" step="1" value="6" /></div>
             </div>
@@ -199,6 +274,6 @@
   <script src="js/config.js?v=20260821b"></script>
   <script src="js/api.js?v=20260821b"></script>
   <script src="js/status.js?v=20260821b"></script>
-  <script src="admin/admin.js?v=20260821a"></script>
+  <script src="admin/admin.js?v=20260822d"></script>
 </body>
 </html>

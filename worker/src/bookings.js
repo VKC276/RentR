@@ -17,6 +17,10 @@ import {
 } from './util.js';
 import { calculatePrice } from './pricing.js';
 import { getConfigMap, closedBookingRetentionMonths, CLOSED_BOOKING_STATUSES } from './config.js';
+import {
+  recordRentalStatsForBooking,
+  clearRentalStatsForBooking,
+} from './stats.js';
 import { assertPadsAvailable, findUnavailablePads } from './calendar.js';
 import {
   mailBookingCreated,
@@ -769,6 +773,10 @@ function monthsAgoIso(months) {
 async function deleteBookingRow(db, bookingId) {
   const b = await db.prepare(`SELECT status FROM bookings WHERE id = ?`).bind(bookingId).first();
   if (!b) return;
+  // Keep anonymized rental facts before the booking (and its PII) disappear.
+  if (b.status === 'Returned') {
+    await recordRentalStatsForBooking(db, bookingId);
+  }
   if (BLOCKING_STATUSES[b.status]) {
     await releasePadLocks(db, bookingId);
   }
@@ -949,6 +957,7 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       .bind(now, bookingId)
       .run();
     releaseLocks = true;
+    await recordRentalStatsForBooking(db, bookingId);
   } else if (action === 'undoHandOut') {
     if (b.status !== 'HandedOut') {
       throw softError('Kan bara ångra utlämning för utlämnad bokning', 400);
@@ -977,6 +986,7 @@ export async function adminUpdateBooking(env, bookingId, payload, actor, ctx) {
       )
       .bind(now, bookingId)
       .run();
+    await clearRentalStatsForBooking(db, bookingId);
   } else if (action === 'setPaid') {
     const paid = !!payload.paid;
     await db

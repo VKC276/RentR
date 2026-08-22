@@ -15,6 +15,7 @@ import {
 } from './util.js';
 import { getConfigMap, closedBookingRetentionMonths } from './config.js';
 import { enrichBooking, resolveMagicToken, logEvent, releasePadLocks } from './bookings.js';
+import { recordRentalStatsForBooking } from './stats.js';
 import { mailDoorPass } from './mail.js';
 
 const DEFAULT_START_HM = '06:00';
@@ -228,6 +229,7 @@ export async function confirmReturn(env, token, ctx) {
     .bind(now, row.id)
     .run();
   await releasePadLocks(db, row.id);
+  await recordRentalStatsForBooking(db, row.id);
   await logEvent(db, row.id, 'confirm_return', row.email, {});
   const booking = await enrichBooking(db, row.id);
   return { booking };

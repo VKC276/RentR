@@ -1189,6 +1189,49 @@ button.ghost.is-busy .status-spinner {
 }
 .nav a.is-active:hover { background: var(--ink, #1a2b33); }
 .admin-view[hidden] { display: none !important; }
+
+.stats-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+.stats-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, rgba(13,110,110,0.1), rgba(196,92,38,0.08));
+  border-radius: 12px;
+}
+.stats-total-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 7rem;
+}
+.stats-total-item strong { font-size: 1.25rem; }
+.stats-table-wrap { overflow-x: auto; }
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.stats-table th,
+.stats-table td {
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+}
+.stats-table th { color: var(--muted); font-weight: 600; }
+.stats-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.stats-table tbody tr:last-child td { border-bottom: 0; }
+.stats-table tfoot td {
+  border-top: 2px solid var(--line);
+  font-weight: 700;
+  padding-top: 0.75rem;
+}
 @media (max-width: 640px) {
   .brand { font-size: 1.25rem; }
   .brand-logo { height: 1.85rem; }

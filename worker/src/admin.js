@@ -4,12 +4,14 @@ import { listPricingRulesAdmin } from './pricing-admin.js';
 import { listUsers } from './users.js';
 import { listDoorPasses, purgeExpiredDoorPasses } from './door.js';
 import { getAdminConfig } from './config.js';
+import { backfillReturnedStats } from './stats.js';
 import { kick } from './util.js';
 
 /** Whole admin page payload in one round trip. */
 export async function adminOverview(env, query, ctx) {
   kick(ctx, purgeOldClosedBookings(env.DB));
   kick(ctx, purgeExpiredDoorPasses(env.DB));
+  kick(ctx, backfillReturnedStats(env.DB));
   return {
     bookings: await listBookingsAdmin(env.DB, query || {}),
     pads: await listPadsAdmin(env.DB),

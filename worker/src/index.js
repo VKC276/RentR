@@ -50,6 +50,7 @@ import {
   purgeExpiredDoorPasses,
 } from './door.js';
 import { adminOverview } from './admin.js';
+import { getRentalStatsAdmin } from './stats.js';
 
 async function readBody(request) {
   if (request.method === 'GET') {
@@ -161,6 +162,9 @@ async function route(env, action, body, ctx) {
     case 'deleteBooking':
       await requireAdmin(env, sessionToken);
       return deleteBookingAdmin(env.DB, body.bookingId);
+    case 'getRentalStats':
+      await requireAdmin(env, sessionToken);
+      return getRentalStatsAdmin(env.DB, body);
     case 'getAdminConfig':
       await requireAdmin(env, sessionToken);
       return getAdminConfig(env.DB);
