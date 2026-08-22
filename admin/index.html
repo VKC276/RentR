@@ -28,12 +28,14 @@
 
     <div class="panel" id="loginPanel">
       <h1>Logga in</h1>
-      <div class="row">
-        <div><label>E-post</label><input id="email" type="email" autocomplete="username" /></div>
-        <div><label>Lösenord</label><input id="password" type="password" autocomplete="current-password" /></div>
-      </div>
-      <p style="margin-top:1rem;"><button type="button" id="btnLogin">Logga in</button></p>
-      <p class="err" id="loginErr" hidden></p>
+      <form id="loginForm">
+        <div class="row">
+          <div><label for="email">E-post</label><input id="email" type="email" autocomplete="username" required /></div>
+          <div><label for="password">Lösenord</label><input id="password" type="password" autocomplete="current-password" required /></div>
+        </div>
+        <p style="margin-top:1rem;"><button type="submit" id="btnLogin">Logga in</button></p>
+        <p class="err" id="loginErr" hidden></p>
+      </form>
     </div>
 
     <div id="app" hidden>
@@ -274,6 +276,6 @@
   <script src="js/config.js?v=20260821b"></script>
   <script src="js/api.js?v=20260821b"></script>
   <script src="js/status.js?v=20260821b"></script>
-  <script src="admin/admin.js?v=20260822d"></script>
+  <script src="admin/admin.js?v=20260823a"></script>
 </body>
 </html>

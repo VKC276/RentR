@@ -143,7 +143,8 @@
     return true;
   }
 
-  $('btnLogin').onclick = function () {
+  $('loginForm').onsubmit = function (e) {
+    e.preventDefault();
     $('loginErr').hidden = true;
     api('login', {
       email: $('email').value.trim(),
