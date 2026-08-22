@@ -166,7 +166,7 @@
     api('logout', {}).catch(function () {});
     session = '';
     localStorage.removeItem('adminSession');
-    showLogin(true);
+    window.location.href = 'index.html';
   };
 
   /**
