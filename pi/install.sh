@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install / update VKK Rental door listener on Raspberry Pi OS (Pi 5).
+# Install / update VKK Rental door listener on Raspberry Pi OS (Pi Zero W).
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +23,7 @@ Options:
   --skip-apt    Do not apt-install python3-venv / python3-lgpio
   -h, --help    Show this help
 
-New Pi tip: ./setup.sh   (install + configure + enable)
+New Pi tip: ./bootstrap.sh --key DIN_NYCKEL   (install + GPIO 25 + systemd)
 EOF
 }
 
@@ -46,7 +46,11 @@ if [[ "$SKIP_APT" -eq 0 ]]; then
   if command -v apt-get >/dev/null 2>&1; then
     echo "==> System packages"
     sudo apt-get update -qq
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv python3-pip python3-lgpio
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv python3-pip
+    # gpiozero backend: Bookworm uses lgpio; older Pi OS / Zero images may have RPi.GPIO.
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-gpiozero || true
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-lgpio python3-rpi-lgpio || true
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-rpi.gpio || true
   else
     echo "apt-get saknas — hoppar över systempaket"
   fi
@@ -59,9 +63,9 @@ source "$VENV/bin/activate"
 pip install --upgrade pip
 pip install -r "$DIR/requirements.txt"
 
-if ! "$VENV/bin/python" -c "import lgpio" 2>/dev/null; then
-  echo "VARNING: python-modulen lgpio hittades inte." >&2
-  echo "         Kör: sudo apt-get install -y python3-lgpio" >&2
+if ! "$VENV/bin/python" -c "import gpiozero" 2>/dev/null; then
+  echo "VARNING: gpiozero hittades inte. Reläet går i dry-run tills paketet finns." >&2
+  echo "         Prova: sudo apt-get install -y python3-gpiozero python3-lgpio python3-rpi.gpio" >&2
 fi
 
 # Migrate legacy RentR env → VKK Rental

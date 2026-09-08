@@ -2,15 +2,16 @@
 """
 VKK Rental — poll Cloudflare Worker for Open door commands and pulse a 5V relay.
 
-Designed for Raspberry Pi 5 + Pi OS (gpiozero / lgpio). Falls back to dry-run
-when GPIO libraries are missing (useful on a laptop while testing the API).
+Designed for Raspberry Pi Zero W + Pi OS (gpiozero / lgpio or RPi.GPIO).
+Falls back to dry-run when GPIO libraries are missing (useful on a laptop
+while testing the API).
 
 Required env:
   API_URL      https://rentr-api.muddy-rice-38d4.workers.dev
   PI_API_KEY   same value as Worker secret DOOR_API_KEY
 
 Optional env:
-  GPIO_PIN=17
+  GPIO_PIN=25
   RELAY_ACTIVE_HIGH=0   # 0 = active-low (most 5V relay boards)
   PULSE_MS=1000         # fallback if Worker omits pulseMs
   POLL_SEC=2.5
@@ -85,7 +86,7 @@ bootstrap_env()
 
 API_URL = os.environ.get("API_URL", DEFAULT_API_URL).rstrip("/")
 API_KEY = os.environ.get("PI_API_KEY", "").strip()
-GPIO_PIN = int(os.environ.get("GPIO_PIN", "17"))
+GPIO_PIN = int(os.environ.get("GPIO_PIN", "25"))
 RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "0")
 DEFAULT_PULSE_MS = int(os.environ.get("PULSE_MS", "1000"))
 POLL_SEC = float(os.environ.get("POLL_SEC", "2.5"))

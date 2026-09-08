@@ -17,6 +17,10 @@ echo
 echo "Klart. Följ loggar med:"
 echo "  sudo journalctl -u vkk-rental-door -f"
 echo
+echo "Ett kommando (Pi Zero W, GPIO 25) nästa gång:"
+echo "  ./bootstrap.sh --key 'nyckel'"
+echo
 echo "Ändra .env senare:"
 echo "  ./configure.sh"
 echo "  ./configure.sh --set PI_API_KEY=nyckel --restart --test"
+echo "  ./bootstrap.sh --skip-install --key 'nyckel' --gpio 25 --test"

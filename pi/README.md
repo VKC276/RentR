@@ -1,25 +1,49 @@
-# VKK Rental — dörrpaket till Raspberry Pi 5
+# VKK Rental — dörrpaket till Raspberry Pi Zero W
 
-Klona/pulla från git och kör. Pi pollar Cloudflare Worker och pulsar ett 5 V-relä när gästen trycker **Öppna dörr**.
+Klona/pulla från git och kör **ett kommando**. Pi pollar Cloudflare Worker och pulsar ett 5 V-relä när gästen trycker **Öppna dörr**. Standard-GPIO är **BCM 25**.
 
 ```
 Webb → Worker openDoor → D1
 Pi   → pollDoor → GPIO → completeDoor
 ```
 
-## Ny installation
+## En kommandorad (rekommenderat)
+
+På Pi:n, med git redan klonat:
+
+```bash
+cd ~/RentR/pi
+chmod +x bootstrap.sh
+./bootstrap.sh --key 'DIN_DOOR_API_KEY'
+```
+
+Ny Pi utan att klona först:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/VKC276/RentR/main/pi/bootstrap.sh | bash -s -- --key 'DIN_DOOR_API_KEY'
+```
+
+Det kommandot: klonar vid behov, installerar venv + systemd (`vkk-rental-door`), skriver `/etc/vkk-rental-door.env` (GPIO **25**, active-low) och startar tjänsten.
+
+```bash
+# Samma script, bara inställningar (ingen ominstall)
+./bootstrap.sh --skip-install --key 'nyNyckel' --gpio 25 --test
+
+# Visa hjälp
+./bootstrap.sh --help
+```
+
+> GitHub-repot heter fortfarande `RentR` (URL/mapp). Produkten heter **VKK Rental**.
+
+## Interaktiv install (valfritt)
 
 ```bash
 cd ~
 git clone https://github.com/VKC276/RentR.git
 cd RentR/pi
-chmod +x setup.sh install.sh update.sh configure.sh
+chmod +x setup.sh install.sh update.sh configure.sh bootstrap.sh
 ./setup.sh
 ```
-
-`setup.sh` gör: install + systemd (`vkk-rental-door`) + **interaktiv .env** (ingen nano) + test/omstart.
-
-> GitHub-repot heter fortfarande `RentR` (URL/mapp). Produkten heter **VKK Rental**.
 
 ## Ändra .env senare (utan nano)
 
@@ -30,7 +54,7 @@ cd ~/RentR/pi
 
 ```bash
 ./configure.sh --set PI_API_KEY=dinNyckel --restart --test
-./configure.sh --set GPIO_PIN=17 --set RELAY_ACTIVE_HIGH=0 --restart
+./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=0 --restart
 ./configure.sh --show
 ```
 
@@ -48,7 +72,8 @@ cd ~/RentR/pi
 
 | Fil | Syfte |
 |-----|--------|
-| `setup.sh` | Ny install: install + configure |
+| `bootstrap.sh` | **Ett kommando:** install + GPIO 25 + nyckel |
+| `setup.sh` | Ny install: install + interaktiv configure |
 | `configure.sh` | Visa/ändra env utan nano |
 | `install.sh` | venv, deps, systemd |
 | `update.sh` | `git pull` + `install.sh` |
@@ -56,13 +81,13 @@ cd ~/RentR/pi
 | `test_api.py` | Testar `pollDoor` |
 | `vkk-rental-door.env.example` | Mall |
 
-## Kabeldragning
+## Kabeldragning (Pi Zero W)
 
-| Relämodul | Pi 5 |
-|-----------|------|
+| Relämodul | Pi Zero W |
+|-----------|-----------|
 | VCC | 5V (fysisk pin 2 eller 4) |
 | GND | GND (fysisk pin 6) |
-| IN | BCM **17** = fysisk pin **11** |
+| IN | BCM **25** = fysisk pin **22** |
 
 ## Secrets
 
@@ -70,7 +95,7 @@ cd ~/RentR/pi
 
 ```bash
 npx wrangler secret put DOOR_API_KEY
-./configure.sh --set PI_API_KEY=sammaNyckel --restart --test
+./bootstrap.sh --skip-install --key 'sammaNyckel' --test
 ```
 
 ## Felsökning

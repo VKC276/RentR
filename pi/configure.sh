@@ -20,7 +20,7 @@ Interactive (default):
 
 Non-interactive:
   ./configure.sh --set PI_API_KEY=yourSecret
-  ./configure.sh --set GPIO_PIN=17 --set RELAY_ACTIVE_HIGH=0
+  ./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=0
   ./configure.sh --show
   ./configure.sh --test
   ./configure.sh --restart
@@ -51,7 +51,7 @@ read_env() {
   ensure_env_file
   API_URL="$DEFAULT_API_URL"
   PI_API_KEY=""
-  GPIO_PIN="17"
+  GPIO_PIN="25"
   RELAY_ACTIVE_HIGH="0"
   PULSE_MS="1000"
   POLL_SEC="2.5"
