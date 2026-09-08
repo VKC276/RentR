@@ -18,6 +18,7 @@ DEFAULT_POLL_SEC="2.5"
 
 API_URL=""
 PI_API_KEY=""
+HEADER_PIN=""
 GPIO_PIN=""
 RELAY_ACTIVE_HIGH=""
 PULSE_MS=""
@@ -42,7 +43,8 @@ Required (ny install, eller om nyckeln saknas):
 
 Settings:
   --api-url URL            Worker-URL (default: ${DEFAULT_API_URL})
-  --gpio N                 BCM-pin (default: ${DEFAULT_GPIO_PIN})
+  --gpio N                 BCM-nummer (gpiozero; samma på Zero W och Pi 5)
+  --header-pin N           Fysiskt hål 1–40 på headern (22 = BCM 25). gpiozero får BOARDN.
   --active-low             Relä active-low (default)
   --active-high            Relä active-high
   --pulse-ms N             Puls om Worker inte skickar pulseMs (default: ${DEFAULT_PULSE_MS})
@@ -60,6 +62,8 @@ Exempel:
   ./bootstrap.sh --key 'din-hemlighet'
   ./bootstrap.sh --test
   ./bootstrap.sh --key 'din-hemlighet' --gpio 25 --test
+  ./bootstrap.sh --skip-install --header-pin 22 --test
+  ./bootstrap.sh --skip-install --header-pin 11 --test
   ./bootstrap.sh --skip-install --key 'ny-nyckel' --gpio 25 --test
 EOF
 }
@@ -119,10 +123,22 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || { echo "--gpio kräver ett pin-nummer" >&2; exit 1; }
       GPIO_PIN="$1"
+      HEADER_PIN=""
       SETTINGS_PROVIDED=1
       ;;
     --gpio=*)
       GPIO_PIN="${1#*=}"
+      HEADER_PIN=""
+      SETTINGS_PROVIDED=1
+      ;;
+    --header-pin|--board|--header)
+      shift
+      [[ $# -gt 0 ]] || { echo "--header-pin kräver fysiskt pin-nummer 1-40" >&2; exit 1; }
+      HEADER_PIN="$1"
+      SETTINGS_PROVIDED=1
+      ;;
+    --header-pin=*|--board=*|--header=*)
+      HEADER_PIN="${1#*=}"
       SETTINGS_PROVIDED=1
       ;;
     --active-low) RELAY_ACTIVE_HIGH="0"; SETTINGS_PROVIDED=1 ;;
@@ -206,7 +222,7 @@ if [[ "$DO_INSTALL" -eq 1 ]]; then
   if [[ "$SKIP_APT" -eq 1 ]]; then
     INSTALL_ARGS+=(--skip-apt)
   fi
-  echo "==> Installerar paketet (Pi Zero W, GPIO BCM ${GPIO_PIN})"
+  echo "==> Installerar paketet (Pi Zero W, BCM ${GPIO_PIN}${HEADER_PIN:+ / fysisk pin $HEADER_PIN})"
   "$DIR/install.sh" "${INSTALL_ARGS[@]+"${INSTALL_ARGS[@]}"}"
 fi
 
@@ -217,6 +233,9 @@ SET_ARGS=(
   --set "POLL_SEC=${POLL_SEC}"
   --set "API_URL=${API_URL}"
 )
+if [[ -n "$HEADER_PIN" ]]; then
+  SET_ARGS+=(--set "HEADER_PIN=${HEADER_PIN}")
+fi
 if [[ -n "$PI_API_KEY" ]]; then
   SET_ARGS+=(--set "PI_API_KEY=${PI_API_KEY}")
 fi
@@ -232,8 +251,8 @@ fi
 "$DIR/configure.sh" "${CONFIG_ARGS[@]}"
 
 echo
-echo "Klart (Pi Zero W, GPIO BCM ${GPIO_PIN})."
+echo "Klart (BCM ${GPIO_PIN}${HEADER_PIN:+ = fysisk pin $HEADER_PIN})."
 echo "  Status:  sudo systemctl status vkk-rental-door"
 echo "  Loggar:  sudo journalctl -u vkk-rental-door -f"
-echo "  Ändra:   $DIR/bootstrap.sh --skip-install --key … --gpio ${GPIO_PIN}"
+echo "  Ändra:   $DIR/bootstrap.sh --skip-install --header-pin 22"
 echo "  Visa:    $DIR/configure.sh --show"

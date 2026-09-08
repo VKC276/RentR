@@ -21,6 +21,7 @@ Interactive (default):
 Non-interactive:
   ./configure.sh --set PI_API_KEY=yourSecret
   ./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=0
+  ./configure.sh --set HEADER_PIN=22
   ./configure.sh --show
   ./configure.sh --test
   ./configure.sh --restart
@@ -52,6 +53,7 @@ read_env() {
   API_URL="$DEFAULT_API_URL"
   PI_API_KEY=""
   GPIO_PIN="25"
+  HEADER_PIN=""
   RELAY_ACTIVE_HIGH="0"
   PULSE_MS="1000"
   POLL_SEC="2.5"
@@ -73,6 +75,7 @@ read_env() {
       API_URL) API_URL="$val" ;;
       PI_API_KEY) PI_API_KEY="$val" ;;
       GPIO_PIN) GPIO_PIN="$val" ;;
+      HEADER_PIN) HEADER_PIN="$val" ;;
       RELAY_ACTIVE_HIGH) RELAY_ACTIVE_HIGH="$val" ;;
       PULSE_MS) PULSE_MS="$val" ;;
       POLL_SEC) POLL_SEC="$val" ;;
@@ -95,30 +98,101 @@ mask_key() {
 
 physical_pin() {
   case "${1:-}" in
+    2) echo 3 ;;
+    3) echo 5 ;;
+    4) echo 7 ;;
+    14) echo 8 ;;
+    15) echo 10 ;;
     17) echo 11 ;;
-    25) echo 22 ;;
+    18) echo 12 ;;
     27) echo 13 ;;
     22) echo 15 ;;
     23) echo 16 ;;
     24) echo 18 ;;
-    18) echo 12 ;;
-    4) echo 7 ;;
+    10) echo 19 ;;
+    9) echo 21 ;;
+    25) echo 22 ;;
+    11) echo 23 ;;
+    8) echo 24 ;;
+    7) echo 26 ;;
+    5) echo 29 ;;
+    6) echo 31 ;;
+    12) echo 32 ;;
+    13) echo 33 ;;
+    19) echo 35 ;;
+    16) echo 36 ;;
+    26) echo 37 ;;
+    20) echo 38 ;;
+    21) echo 40 ;;
     *) echo "?" ;;
   esac
 }
 
+bcm_from_header() {
+  case "${1:-}" in
+    3) echo 2 ;;
+    5) echo 3 ;;
+    7) echo 4 ;;
+    8) echo 14 ;;
+    10) echo 15 ;;
+    11) echo 17 ;;
+    12) echo 18 ;;
+    13) echo 27 ;;
+    15) echo 22 ;;
+    16) echo 23 ;;
+    18) echo 24 ;;
+    19) echo 10 ;;
+    21) echo 9 ;;
+    22) echo 25 ;;
+    23) echo 11 ;;
+    24) echo 8 ;;
+    26) echo 7 ;;
+    29) echo 5 ;;
+    31) echo 6 ;;
+    32) echo 12 ;;
+    33) echo 13 ;;
+    35) echo 19 ;;
+    36) echo 16 ;;
+    37) echo 26 ;;
+    38) echo 20 ;;
+    40) echo 21 ;;
+    *) echo "?" ;;
+  esac
+}
+
+sync_pins() {
+  # HEADER_PIN (physical hole) is the human setting; GPIO_PIN is BCM for gpiozero.
+  if [[ -n "${HEADER_PIN:-}" ]]; then
+    local bcm
+    bcm="$(bcm_from_header "$HEADER_PIN")"
+    if [[ "$bcm" == "?" ]]; then
+      echo "HEADER_PIN=${HEADER_PIN} är inte GPIO. Pin 25 är GND; relä IN på pin 22 = BCM 25." >&2
+      exit 1
+    fi
+    GPIO_PIN="$bcm"
+  elif [[ -n "${GPIO_PIN:-}" ]]; then
+    HEADER_PIN="$(physical_pin "$GPIO_PIN")"
+    if [[ "$HEADER_PIN" == "?" ]]; then
+      HEADER_PIN=""
+    fi
+  fi
+}
+
 show_env() {
   read_env
+  sync_pins
   echo "Fil: $ENV_FILE"
   echo "  API_URL           = $API_URL"
   echo "  PI_API_KEY        = $(mask_key "$PI_API_KEY")"
-  echo "  GPIO_PIN          = $GPIO_PIN  (BCM, fysisk pin $(physical_pin "$GPIO_PIN"))"
+  echo "  HEADER_PIN        = ${HEADER_PIN:-?}  (fysiskt hål 1–40 på headern)"
+  echo "  GPIO_PIN          = $GPIO_PIN  (BCM, gpiozero-nummer — samma på Zero W och Pi 5)"
   echo "  RELAY_ACTIVE_HIGH = $RELAY_ACTIVE_HIGH  (0=active-low, idle pin HIGH)"
   echo "  PULSE_MS          = $PULSE_MS"
   echo "  POLL_SEC          = $POLL_SEC"
 }
 
 write_env() {
+  sync_pins
   local tmp
   tmp="$(mktemp)"
   cat >"$tmp" <<EOF
@@ -127,6 +201,7 @@ API_URL=${API_URL}
 PI_API_KEY=${PI_API_KEY}
 
 GPIO_PIN=${GPIO_PIN}
+HEADER_PIN=${HEADER_PIN}
 RELAY_ACTIVE_HIGH=${RELAY_ACTIVE_HIGH}
 PULSE_MS=${PULSE_MS}
 POLL_SEC=${POLL_SEC}
@@ -171,7 +246,9 @@ interactive() {
   if [[ -n "${new_key:-}" ]]; then
     PI_API_KEY="$new_key"
   fi
-  GPIO_PIN="$(prompt_value "GPIO_PIN (BCM)" "$GPIO_PIN")"
+  GPIO_PIN="$(prompt_value "GPIO_PIN BCM (eller Enter och sätt HEADER_PIN)" "$GPIO_PIN")"
+  HEADER_PIN="$(prompt_value "HEADER_PIN fysisk hål 1-40 (22=BCM25, 11=BCM17)" "${HEADER_PIN:-$(physical_pin "$GPIO_PIN")}")"
+  sync_pins
   RELAY_ACTIVE_HIGH="$(prompt_value "RELAY_ACTIVE_HIGH (0=active-low, 1=active-high)" "$RELAY_ACTIVE_HIGH")"
   PULSE_MS="$(prompt_value "PULSE_MS" "$PULSE_MS")"
   POLL_SEC="$(prompt_value "POLL_SEC" "$POLL_SEC")"
@@ -256,7 +333,8 @@ if [[ ${#SET_ARGS[@]} -gt 0 ]]; then
     case "$key" in
       API_URL) API_URL="$val" ;;
       PI_API_KEY) PI_API_KEY="$val" ;;
-      GPIO_PIN) GPIO_PIN="$val" ;;
+      GPIO_PIN) GPIO_PIN="$val"; HEADER_PIN="" ;;
+      HEADER_PIN) HEADER_PIN="$val" ;;
       RELAY_ACTIVE_HIGH) RELAY_ACTIVE_HIGH="$val" ;;
       PULSE_MS) PULSE_MS="$val" ;;
       POLL_SEC) POLL_SEC="$val" ;;

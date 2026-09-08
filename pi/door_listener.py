@@ -11,7 +11,8 @@ Required env:
   PI_API_KEY   same value as Worker secret DOOR_API_KEY
 
 Optional env:
-  GPIO_PIN=25
+  GPIO_PIN=25           # BCM number (gpiozero default)
+  HEADER_PIN=22         # physical 40-pin header hole; if set, gpiozero uses BOARD*
   RELAY_ACTIVE_HIGH=0   # 0 = active-low (most 5V relay boards)
   PULSE_MS=1000         # fallback if Worker omits pulseMs
   POLL_SEC=2.5
@@ -86,12 +87,12 @@ bootstrap_env()
 
 API_URL = os.environ.get("API_URL", DEFAULT_API_URL).rstrip("/")
 API_KEY = os.environ.get("PI_API_KEY", "").strip().strip("'").strip('"')
-GPIO_PIN = int(os.environ.get("GPIO_PIN", "25"))
 RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "0")
 DEFAULT_PULSE_MS = int(os.environ.get("PULSE_MS", "1000"))
 POLL_SEC = float(os.environ.get("POLL_SEC", "2.5"))
 
-# BCM → physical pin on the 40-pin header (Pi Zero W / Pi 3/4/5).
+# BCM ↔ physical pin on the 40-pin header. Same map on Pi Zero W, 3, 4 and 5.
+# gpiozero integers are BCM; "BOARD22" is the hole you count on the header.
 BCM_PHYSICAL = {
     2: 3,
     3: 5,
@@ -120,11 +121,64 @@ BCM_PHYSICAL = {
     20: 38,
     21: 40,
 }
+PHYSICAL_BCM = {phys: bcm for bcm, phys in BCM_PHYSICAL.items()}
+# Header holes that are power, ground, or ID EEPROM — not GPIO.
+HEADER_NOT_GPIO = frozenset({1, 2, 4, 6, 9, 14, 17, 20, 25, 27, 28, 30, 34, 39})
 
 
 def physical_pin(bcm: int) -> str:
     n = BCM_PHYSICAL.get(int(bcm))
     return str(n) if n else "?"
+
+
+def _parse_board_token(raw: str) -> int | None:
+    s = raw.strip().upper().replace(" ", "")
+    if s.startswith("BOARD"):
+        s = s[5:]
+    elif s.startswith("P"):
+        s = s[1:]
+    if s.isdigit():
+        return int(s)
+    return None
+
+
+def resolve_pins(header_raw: str, gpio_raw: str) -> tuple[int, int, int | str]:
+    """Return (bcm, header, gpiozero_spec).
+
+    gpiozero_spec is an int (BCM) or 'BOARDn' (physical). Prefer BOARD when
+    HEADER_PIN is set so the library maps the header hole.
+    """
+    header_raw = (header_raw or "").strip()
+    gpio_raw = (gpio_raw or "").strip() or "25"
+
+    if header_raw:
+        header = _parse_board_token(header_raw)
+        if header is None:
+            raise SystemExit(f"Ogiltig HEADER_PIN={header_raw!r}")
+        if header in HEADER_NOT_GPIO:
+            raise SystemExit(
+                f"HEADER_PIN={header} är inte GPIO "
+                f"(pin 25 är GND, pin 1/2/4 är ström). Relä IN: pin 22 = BCM 25."
+            )
+        bcm = PHYSICAL_BCM.get(header)
+        if bcm is None:
+            raise SystemExit(f"HEADER_PIN={header} finns inte på 40-pinners headern")
+        return bcm, header, f"BOARD{header}"
+
+    board = _parse_board_token(gpio_raw) if not gpio_raw.isdigit() else None
+    if board is not None and not gpio_raw.isdigit():
+        return resolve_pins(str(board), "25")
+
+    bcm = int(gpio_raw)
+    header_n = BCM_PHYSICAL.get(bcm)
+    spec: int | str = bcm
+    return bcm, int(header_n) if header_n else 0, spec
+
+
+GPIO_PIN, HEADER_PIN, GPIOZERO_SPEC = resolve_pins(
+    os.environ.get("HEADER_PIN", ""),
+    os.environ.get("GPIO_PIN", "25"),
+)
 
 
 def api_call(action: str, **extra):
@@ -161,7 +215,7 @@ def _load_gpio_device():
     from gpiozero import DigitalOutputDevice  # type: ignore
 
     return DigitalOutputDevice(
-        GPIO_PIN,
+        GPIOZERO_SPEC,
         active_high=RELAY_ACTIVE_HIGH,
         initial_value=False,
     )
@@ -174,7 +228,7 @@ class Relay:
             self._dev = _load_gpio_device()
             mode = "active-high" if RELAY_ACTIVE_HIGH else "active-low"
             print(
-                f"GPIO ready on BCM{GPIO_PIN} = fysisk pin {physical_pin(GPIO_PIN)} ({mode}, idle=off)",
+                f"GPIO ready gpiozero={GPIOZERO_SPEC!s} → BCM{GPIO_PIN} = fysisk pin {HEADER_PIN or physical_pin(GPIO_PIN)} ({mode}, idle=off)",
                 flush=True,
             )
         except ImportError:
@@ -186,7 +240,11 @@ class Relay:
     def pulse(self, pulse_ms: int) -> None:
         ms = max(50, int(pulse_ms))
         if self._dev is None:
-            print(f"[dry-run] pulse {ms}ms on BCM{GPIO_PIN} (fysisk pin {physical_pin(GPIO_PIN)})", flush=True)
+            print(
+                f"[dry-run] pulse {ms}ms gpiozero={GPIOZERO_SPEC!s} "
+                f"(BCM{GPIO_PIN} / fysisk pin {HEADER_PIN or physical_pin(GPIO_PIN)})",
+                flush=True,
+            )
             time.sleep(ms / 1000.0)
             return
         self._dev.on()
