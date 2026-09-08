@@ -85,7 +85,7 @@ def env_bool(name: str, default: str = "0") -> bool:
 bootstrap_env()
 
 API_URL = os.environ.get("API_URL", DEFAULT_API_URL).rstrip("/")
-API_KEY = os.environ.get("PI_API_KEY", "").strip()
+API_KEY = os.environ.get("PI_API_KEY", "").strip().strip("'").strip('"')
 GPIO_PIN = int(os.environ.get("GPIO_PIN", "25"))
 RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "0")
 DEFAULT_PULSE_MS = int(os.environ.get("PULSE_MS", "1000"))

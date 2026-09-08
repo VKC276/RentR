@@ -22,8 +22,9 @@ const DEFAULT_START_HM = '06:00';
 const DEFAULT_END_HM = '22:00';
 
 function requirePiKey(env, apiKey) {
-  const expected = env.DOOR_API_KEY;
-  if (!expected || String(apiKey) !== String(expected)) {
+  const expected = String(env.DOOR_API_KEY || '').trim();
+  const got = String(apiKey || '').trim();
+  if (!expected || got !== expected) {
     throw softError('Unauthorized', 401);
   }
 }

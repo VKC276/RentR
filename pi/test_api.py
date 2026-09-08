@@ -36,12 +36,23 @@ def main() -> None:
         data = dl.api_call("pollDoor")
     except Exception as exc:  # noqa: BLE001
         print(f"FAIL: {exc}", file=sys.stderr, flush=True)
-        print(
-            "Tips: samma ASCII-nyckel i Worker DOOR_API_KEY och /etc/vkk-rental-door.env; "
-            "kör ./configure.sh --set PI_API_KEY=… --restart",
-            file=sys.stderr,
-            flush=True,
-        )
+        err = str(exc)
+        if "401" in err or "Unauthorized" in err:
+            print(
+                "Nyckeln på Pi:n matchar inte Worker-secret DOOR_API_KEY.\n"
+                "Sätt samma värde på båda:\n"
+                "  printf '%s' 'NYCKEL' | npx wrangler secret put DOOR_API_KEY\n"
+                "  ./bootstrap.sh --skip-install --key 'NYCKEL' --gpio 25 --test",
+                file=sys.stderr,
+                flush=True,
+            )
+        else:
+            print(
+                "Tips: samma ASCII-nyckel i Worker DOOR_API_KEY och /etc/vkk-rental-door.env; "
+                "kolla API_URL och nätverk. Kör: ./configure.sh --show",
+                file=sys.stderr,
+                flush=True,
+            )
         sys.exit(2)
     print(json.dumps(data, indent=2, ensure_ascii=False), flush=True)
     cmd = data.get("command") if isinstance(data, dict) else None

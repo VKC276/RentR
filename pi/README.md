@@ -27,6 +27,7 @@ Det kommandot: klonar vid behov, installerar venv + systemd (`vkk-rental-door`),
 
 ```bash
 # Samma script, bara inställningar (ingen ominstall)
+./bootstrap.sh --test
 ./bootstrap.sh --skip-install --key 'nyNyckel' --gpio 25 --test
 
 # Visa hjälp

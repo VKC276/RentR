@@ -27,6 +27,8 @@ ENABLE_SERVICE=1
 DO_TEST=0
 SKIP_APT=0
 SHOW_ONLY=0
+KEY_PROVIDED=0
+SETTINGS_PROVIDED=0
 
 usage() {
   cat <<EOF
@@ -50,12 +52,13 @@ Install:
   --skip-install           Bara skriv .env (ingen apt/venv/systemd)
   --no-enable              Installera men starta inte tjänsten
   --skip-apt               Hoppa över apt-get (vid ominstall)
-  --test                   Kör pollDoor-test efteråt
+  --test                   Bara testa pollDoor (ingen ominstall). Med --key: spara + testa
   --show                   Visa inställningar och avsluta
   -h, --help               Denna hjälp
 
 Exempel:
   ./bootstrap.sh --key 'din-hemlighet'
+  ./bootstrap.sh --test
   ./bootstrap.sh --key 'din-hemlighet' --gpio 25 --test
   ./bootstrap.sh --skip-install --key 'ny-nyckel' --gpio 25 --test
 EOF
@@ -96,43 +99,53 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || { echo "--key kräver ett värde" >&2; exit 1; }
       PI_API_KEY="$1"
+      KEY_PROVIDED=1
       ;;
     --key=*|--api-key=*)
       PI_API_KEY="${1#*=}"
+      KEY_PROVIDED=1
       ;;
     --api-url)
       shift
       [[ $# -gt 0 ]] || { echo "--api-url kräver ett värde" >&2; exit 1; }
       API_URL="$1"
+      SETTINGS_PROVIDED=1
       ;;
     --api-url=*)
       API_URL="${1#*=}"
+      SETTINGS_PROVIDED=1
       ;;
     --gpio)
       shift
       [[ $# -gt 0 ]] || { echo "--gpio kräver ett pin-nummer" >&2; exit 1; }
       GPIO_PIN="$1"
+      SETTINGS_PROVIDED=1
       ;;
     --gpio=*)
       GPIO_PIN="${1#*=}"
+      SETTINGS_PROVIDED=1
       ;;
-    --active-low) RELAY_ACTIVE_HIGH="0" ;;
-    --active-high) RELAY_ACTIVE_HIGH="1" ;;
+    --active-low) RELAY_ACTIVE_HIGH="0"; SETTINGS_PROVIDED=1 ;;
+    --active-high) RELAY_ACTIVE_HIGH="1"; SETTINGS_PROVIDED=1 ;;
     --pulse-ms)
       shift
       [[ $# -gt 0 ]] || { echo "--pulse-ms kräver ett värde" >&2; exit 1; }
       PULSE_MS="$1"
+      SETTINGS_PROVIDED=1
       ;;
     --pulse-ms=*)
       PULSE_MS="${1#*=}"
+      SETTINGS_PROVIDED=1
       ;;
     --poll-sec)
       shift
       [[ $# -gt 0 ]] || { echo "--poll-sec kräver ett värde" >&2; exit 1; }
       POLL_SEC="$1"
+      SETTINGS_PROVIDED=1
       ;;
     --poll-sec=*)
       POLL_SEC="${1#*=}"
+      SETTINGS_PROVIDED=1
       ;;
     --skip-install) DO_INSTALL=0 ;;
     --no-enable) ENABLE_SERVICE=0 ;;
@@ -157,6 +170,14 @@ export ENV_FILE="${ENV_FILE:-/etc/vkk-rental-door.env}"
 if [[ "$SHOW_ONLY" -eq 1 ]]; then
   "$DIR/configure.sh" --show
   exit 0
+fi
+
+# Bare --test must not reinstall or rewrite .env (stale/placeholder key → 401).
+if [[ "$DO_TEST" -eq 1 && "$KEY_PROVIDED" -eq 0 && "$SETTINGS_PROVIDED" -eq 0 ]]; then
+  echo "==> Testar pollDoor mot Worker (ingen install, ingen .env-ändring)"
+  "$DIR/configure.sh" --show || true
+  "$DIR/configure.sh" --test
+  exit $?
 fi
 
 GPIO_PIN="${GPIO_PIN:-$DEFAULT_GPIO_PIN}"
