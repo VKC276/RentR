@@ -42,6 +42,8 @@ Nyckel = Worker-secret `DOOR_API_KEY` (sätts med `npx wrangler secret put DOOR_
 
 Hål 25 på headern är GND.
 
+Dörrkommandon lever **30 sekunder**. Äldre pending kasseras. Vid wifi-lucka töms inte en kö av slag — max **en** puls (senaste giltiga trycket). Worker måste vara deployad för det.
+
 ## Stabilitet (UPS täcker ström — det här täcker OS)
 
 Pi Zero W:s vanliga självmål är **Wi-Fi som somnar**, **SD-kortet fylls av loggar**, **tjänsten ger upp efter kraschloop**, och **fel klocka** (TLS mot Worker). `./setup.sh` kör `harden.sh` som:
