@@ -19,7 +19,7 @@ Sätt (eller behåll):
 |-----|-------|
 | `pagesBaseUrl` | `https://rent.vastervikclimbing.se` |
 
-Ingen trailing slash. Mejllänkar byggs som `{pagesBaseUrl}/booking.html?t=…` m.m.
+Ingen trailing slash. Mejllänkar byggs som `{pagesBaseUrl}/booking.html?t=…`, `{pagesBaseUrl}/admin/#reset=…` m.m.
 
 ## GAS
 

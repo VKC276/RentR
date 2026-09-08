@@ -66,6 +66,9 @@
     listUsers: 'Hämtar användare…',
     createUser: 'Skapar användare…',
     deleteUser: 'Tar bort användare…',
+    sendUserPasswordReset: 'Skickar återställningsmejl…',
+    requestPasswordReset: 'Skickar länk…',
+    resetPassword: 'Sparar lösenord…',
     changePassword: 'Byter lösenord…',
     listDoorPasses: 'Hämtar dörrlänkar…',
     createDoorPass: 'Skickar dörrlänk…',
@@ -82,11 +85,32 @@
 
   function showLogin(show) {
     if (show) closeAllModals();
-    $('loginPanel').hidden = !show;
+    if (show && resetTokenFromHash()) {
+      showAuthPanel('reset');
+    } else if (show) {
+      showAuthPanel('login');
+    } else {
+      $('loginPanel').hidden = true;
+      $('forgotPanel').hidden = true;
+      $('resetPanel').hidden = true;
+    }
     $('app').hidden = show;
     $('nav').hidden = show;
     if (show) renderAdminUser(null);
     if (!show) showView(currentView());
+  }
+
+  function showAuthPanel(name) {
+    $('loginPanel').hidden = name !== 'login';
+    $('forgotPanel').hidden = name !== 'forgot';
+    $('resetPanel').hidden = name !== 'reset';
+  }
+
+  function resetTokenFromHash() {
+    var h = (location.hash || '').replace(/^#/, '');
+    var m = /^reset=(.+)$/.exec(h);
+    if (!m) return '';
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
   }
 
   function renderAdminUser(user) {
@@ -107,6 +131,7 @@
 
   function currentView() {
     var hash = (location.hash || '').replace(/^#/, '');
+    if (hash.indexOf('reset=') === 0) return 'bookings';
     if (hash === 'pricing' || hash === 'users') return 'settings';
     return VIEWS[hash] ? hash : 'bookings';
   }
@@ -126,6 +151,10 @@
   }
 
   window.addEventListener('hashchange', function () {
+    if (resetTokenFromHash() && $('app').hidden) {
+      showAuthPanel('reset');
+      return;
+    }
     if (!$('app').hidden) showView(currentView());
   });
 
@@ -143,9 +172,82 @@
     return true;
   }
 
+  function clearResetHash() {
+    if (!resetTokenFromHash()) return;
+    if (history.replaceState) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+
+  $('btnShowForgot').onclick = function () {
+    $('forgotOk').hidden = true;
+    $('forgotErr').hidden = true;
+    showAuthPanel('forgot');
+  };
+
+  $('btnForgotBack').onclick = function () {
+    showAuthPanel('login');
+  };
+
+  $('btnResetBack').onclick = function () {
+    clearResetHash();
+    if (session) {
+      showLogin(false);
+      refreshAll();
+    } else {
+      showAuthPanel('login');
+    }
+  };
+
+  $('forgotForm').onsubmit = function (e) {
+    e.preventDefault();
+    $('forgotOk').hidden = true;
+    $('forgotErr').hidden = true;
+    api('requestPasswordReset', { email: $('forgotEmail').value.trim() }, $('btnForgot')).then(function () {
+      $('forgotOk').hidden = false;
+      $('forgotOk').textContent =
+        'Om adressen finns i systemet skickas en återställningslänk dit (giltig i en timme).';
+    }).catch(function (err) {
+      $('forgotErr').hidden = false;
+      $('forgotErr').textContent = err.message || 'Kunde inte skicka länk';
+    });
+  };
+
+  $('resetForm').onsubmit = function (e) {
+    e.preventDefault();
+    $('resetOk').hidden = true;
+    $('resetErr').hidden = true;
+    var token = resetTokenFromHash();
+    var next = $('resetPass').value;
+    if (!token) {
+      $('resetErr').hidden = false;
+      $('resetErr').textContent = 'Länken saknar token. Begär en ny från inloggningen.';
+      return;
+    }
+    if (next !== $('resetPass2').value) {
+      $('resetErr').hidden = false;
+      $('resetErr').textContent = 'Bekräftelsen matchar inte det nya lösenordet.';
+      return;
+    }
+    api('resetPassword', { token: token, password: next }, $('btnReset')).then(function () {
+      session = '';
+      localStorage.removeItem('adminSession');
+      clearResetHash();
+      $('resetPass').value = $('resetPass2').value = '';
+      showAuthPanel('login');
+      $('loginOk').hidden = false;
+      $('loginOk').textContent = 'Lösenordet är uppdaterat. Logga in.';
+      $('loginErr').hidden = true;
+    }).catch(function (err) {
+      $('resetErr').hidden = false;
+      $('resetErr').textContent = err.message || 'Kunde inte spara lösenord';
+    });
+  };
+
   $('loginForm').onsubmit = function (e) {
     e.preventDefault();
     $('loginErr').hidden = true;
+    $('loginOk').hidden = true;
     api('login', {
       email: $('email').value.trim(),
       password: $('password').value
@@ -1162,10 +1264,24 @@
     var html = '<div class="table-scroll"><table class="table"><thead><tr><th>Namn</th><th>E-post</th><th>Aktiv</th><th></th></tr></thead><tbody>';
     users.forEach(function (u) {
       html += '<tr><td>' + escapeHtml(u.firstName + ' ' + u.lastName) + '</td><td>' + escapeHtml(u.email) + '</td><td>' + (u.active ? 'Ja' : 'Nej') +
-        '</td><td><button type="button" class="ghost" data-del-user="' + u.id + '">Radera</button></td></tr>';
+        '</td><td><button type="button" class="ghost" data-reset-user="' + u.id + '">Skicka återställning</button> ' +
+        '<button type="button" class="ghost" data-del-user="' + u.id + '">Radera</button></td></tr>';
     });
     html += '</tbody></table></div>';
     $('usersList').innerHTML = html;
+    $('usersList').querySelectorAll('[data-reset-user]').forEach(function (btn) {
+      btn.onclick = function () {
+        $('userErr').hidden = true;
+        api('sendUserPasswordReset', { userId: btn.getAttribute('data-reset-user'), kind: 'reset' }, btn).then(function (res) {
+          $('userErr').hidden = true;
+          $('userOk').hidden = false;
+          $('userOk').textContent = 'Återställningslänk skickad till ' + (res.email || 'användaren') + '.';
+        }).catch(function (e) {
+          $('userErr').hidden = false;
+          $('userErr').textContent = e.message;
+        });
+      };
+    });
     $('usersList').querySelectorAll('[data-del-user]').forEach(function (btn) {
       btn.onclick = function () {
         if (!confirm('Radera användare?')) return;
@@ -1179,13 +1295,20 @@
 
   $('btnCreateUser').onclick = function () {
     $('userErr').hidden = true;
+    $('userOk').hidden = true;
+    var pass = $('uPass').value;
+    var email = $('uEmail').value.trim();
     api('createUser', {
       firstName: $('uFirst').value.trim(),
       lastName: $('uLast').value.trim(),
-      email: $('uEmail').value.trim(),
-      password: $('uPass').value
+      email: email,
+      password: pass
     }, $('btnCreateUser')).then(function () {
       $('uFirst').value = $('uLast').value = $('uEmail').value = $('uPass').value = '';
+      $('userOk').hidden = false;
+      $('userOk').textContent = pass
+        ? 'Användaren är skapad.'
+        : 'Användaren är skapad. Inbjudan skickad till ' + email + '.';
       return refreshAll();
     }).catch(function (e) {
       $('userErr').hidden = false;
@@ -1432,7 +1555,10 @@
 
   fillStatusFilter();
 
-  if (session) {
+  if (resetTokenFromHash()) {
+    showLogin(true);
+    showAuthPanel('reset');
+  } else if (session) {
     // adminOverview already rejects an invalid session, so no separate 'me' call.
     showLogin(false);
     refreshAll();

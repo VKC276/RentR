@@ -5,6 +5,7 @@
 
 import { softError, nowIso, randomHex } from './util.js';
 import { getConfigMap } from './config.js';
+import { mailPasswordReset } from './mail.js';
 
 function pepper(env) {
   const p = env.PASSWORD_PEPPER;
@@ -220,4 +221,109 @@ export async function setup(env, body) {
     .run();
 
   return { ok: true, created: true, email };
+}
+
+const RESET_TTL_MS = 60 * 60 * 1000;
+
+function resetUrl(pagesBaseUrl, token) {
+  return (pagesBaseUrl || '').replace(/\/$/, '') + '/admin/#reset=' + encodeURIComponent(token);
+}
+
+export async function purgeExpiredPasswordResets(db) {
+  await db.prepare(`DELETE FROM password_resets WHERE expires_at < ?`).bind(nowIso()).run();
+}
+
+export async function issuePasswordReset(env, user, kind) {
+  if (!user || !user.id || !user.email) throw softError('Användare saknas', 404);
+  const cfg = await getConfigMap(env.DB);
+  const base = (cfg.pagesBaseUrl || '').replace(/\/$/, '');
+  if (!base) throw softError('pagesBaseUrl saknas i config — kan inte skicka återställningslänk', 500);
+
+  const now = nowIso();
+  await env.DB
+    .prepare(`UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL`)
+    .bind(now, user.id)
+    .run();
+
+  const token = randomHex(32);
+  const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+  await env.DB
+    .prepare(
+      `INSERT INTO password_resets (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`
+    )
+    .bind(token, user.id, expiresAt, now)
+    .run();
+
+  await mailPasswordReset(env, user, resetUrl(base, token), kind);
+  return { ok: true, sent: true };
+}
+
+export async function requestPasswordReset(env, email) {
+  const addr = String(email || '').trim().toLowerCase();
+  const ok = { ok: true };
+  if (!addr) return ok;
+  const row = await env.DB
+    .prepare(
+      `SELECT id, email, first_name AS firstName, last_name AS lastName, role, active
+       FROM users WHERE lower(email) = ?`
+    )
+    .bind(addr)
+    .first();
+  if (!row || !row.active) return ok;
+  try {
+    await issuePasswordReset(env, row, 'reset');
+  } catch (err) {
+    console.error('Password reset mail failed', String(err && err.message ? err.message : err));
+  }
+  return ok;
+}
+
+export async function sendUserPasswordReset(env, userId, kind) {
+  const row = await env.DB
+    .prepare(
+      `SELECT id, email, first_name AS firstName, last_name AS lastName, role, active
+       FROM users WHERE id = ?`
+    )
+    .bind(userId)
+    .first();
+  if (!row) throw softError('Användare saknas', 404);
+  if (!row.active) throw softError('Kontot är inaktivt', 400);
+  await issuePasswordReset(env, row, kind === 'invite' ? 'invite' : 'reset');
+  return { ok: true, sent: true, email: row.email };
+}
+
+export async function resetPasswordWithToken(env, token, newPassword) {
+  const tok = String(token || '').trim();
+  const next = String(newPassword || '');
+  if (!tok) throw softError('Ogiltig länk', 400);
+  if (next.length < 8) throw softError('Lösenordet måste vara minst 8 tecken', 400);
+
+  const row = await env.DB
+    .prepare(
+      `SELECT r.token, r.user_id AS userId, r.expires_at AS expiresAt, r.used_at AS usedAt,
+              u.active, u.email
+       FROM password_resets r JOIN users u ON u.id = r.user_id
+       WHERE r.token = ?`
+    )
+    .bind(tok)
+    .first();
+  if (!row || row.usedAt) throw softError('Länken är ogiltig eller redan använd', 400);
+  if (sessionExpired(row.expiresAt) || new Date(row.expiresAt).getTime() < Date.now()) {
+    throw softError('Länken har gått ut. Begär en ny.', 400);
+  }
+  if (!row.active) throw softError('Kontot är inaktivt', 400);
+
+  const salt = randomHex(16);
+  const passwordHash = await hashPassword(env, next, salt);
+  const now = nowIso();
+  await env.DB
+    .prepare(`UPDATE users SET password_hash = ?, salt = ?, updated_at = ? WHERE id = ?`)
+    .bind(passwordHash, salt, now, row.userId)
+    .run();
+  await env.DB
+    .prepare(`UPDATE password_resets SET used_at = ? WHERE token = ?`)
+    .bind(now, tok)
+    .run();
+  await revokeSessionsForUser(env, row.userId);
+  return { ok: true };
 }

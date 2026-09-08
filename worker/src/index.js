@@ -28,6 +28,10 @@ import {
   changePassword,
   requireAdmin,
   setup,
+  requestPasswordReset,
+  resetPasswordWithToken,
+  sendUserPasswordReset,
+  purgeExpiredPasswordResets,
 } from './auth.js';
 import { listPadsAdmin, createPad, updatePad, setPadActive } from './pads.js';
 import {
@@ -132,6 +136,13 @@ async function route(env, action, body, ctx) {
 
     case 'login':
       return loginAdmin(env, body.email, body.password);
+    case 'requestPasswordReset':
+      return requestPasswordReset(env, body.email);
+    case 'resetPassword':
+      return resetPasswordWithToken(env, body.token || body.t, body.newPassword || body.password);
+    case 'sendUserPasswordReset':
+      await requireAdmin(env, sessionToken);
+      return sendUserPasswordReset(env, body.userId, body.kind);
     case 'logout':
       return logout(env, sessionToken || body.sessionToken);
     case 'me':
@@ -242,5 +253,6 @@ export default {
   async scheduled(event, env, ctx) {
     kick(ctx, purgeOldClosedBookings(env.DB));
     kick(ctx, purgeExpiredDoorPasses(env.DB));
+    kick(ctx, purgeExpiredPasswordResets(env.DB));
   },
 };

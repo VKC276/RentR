@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="/" />
   <title>ClimbLink — Admin</title>
-  <link rel="stylesheet" href="css/styles.css?v=20260822d" />
+  <link rel="stylesheet" href="css/styles.css?v=20260908a" />
 </head>
 <body>
   <div class="wrap">
@@ -34,7 +34,35 @@
           <div><label for="password">Lösenord</label><input id="password" type="password" autocomplete="current-password" required /></div>
         </div>
         <p style="margin-top:1rem;"><button type="submit" id="btnLogin">Logga in</button></p>
+        <p class="muted" style="margin-top:0.75rem;"><button type="button" class="linkish" id="btnShowForgot">Glömt lösenord?</button></p>
+        <p class="ok" id="loginOk" hidden></p>
         <p class="err" id="loginErr" hidden></p>
+      </form>
+    </div>
+
+    <div class="panel" id="forgotPanel" hidden>
+      <h1>Återställ lösenord</h1>
+      <p class="muted">Ange kontots e-post. Om adressen finns skickar vi en länk som gäller i en timme.</p>
+      <form id="forgotForm">
+        <div><label for="forgotEmail">E-post</label><input id="forgotEmail" type="email" autocomplete="username" required /></div>
+        <p style="margin-top:1rem;"><button type="submit" id="btnForgot">Skicka länk</button></p>
+        <p class="muted" style="margin-top:0.75rem;"><button type="button" class="linkish" id="btnForgotBack">Tillbaka till inloggning</button></p>
+        <p class="ok" id="forgotOk" hidden></p>
+        <p class="err" id="forgotErr" hidden></p>
+      </form>
+    </div>
+
+    <div class="panel" id="resetPanel" hidden>
+      <h1>Välj nytt lösenord</h1>
+      <form id="resetForm">
+        <div class="row">
+          <div><label for="resetPass">Nytt lösenord</label><input id="resetPass" type="password" autocomplete="new-password" required minlength="8" /></div>
+          <div><label for="resetPass2">Bekräfta</label><input id="resetPass2" type="password" autocomplete="new-password" required minlength="8" /></div>
+        </div>
+        <p style="margin-top:1rem;"><button type="submit" id="btnReset">Spara lösenord</button></p>
+        <p class="muted" style="margin-top:0.75rem;"><button type="button" class="linkish" id="btnResetBack">Tillbaka</button></p>
+        <p class="ok" id="resetOk" hidden></p>
+        <p class="err" id="resetErr" hidden></p>
       </form>
     </div>
 
@@ -236,10 +264,12 @@
             <div class="row">
               <div><label>Förnamn</label><input id="uFirst" /></div>
               <div><label>Efternamn</label><input id="uLast" /></div>
-              <div><label>E-post</label><input id="uEmail" type="email" /></div>
-              <div><label>Lösenord</label><input id="uPass" type="password" /></div>
+              <div><label>E-post</label><input id="uEmail" type="email" autocomplete="off" /></div>
+              <div><label>Lösenord (valfritt)</label><input id="uPass" type="password" placeholder="Tomt = skicka länk via e-post" /></div>
             </div>
+            <p class="muted">Lämna lösenord tomt för att skicka en länk där personen själv sätter lösenord (gäller en timme).</p>
             <p><button type="button" id="btnCreateUser">Skapa</button></p>
+            <p class="ok" id="userOk" hidden></p>
             <p class="err" id="userErr" hidden></p>
           </div>
         </details>
@@ -276,6 +306,6 @@
   <script src="js/config.js?v=20260821b"></script>
   <script src="js/api.js?v=20260821b"></script>
   <script src="js/status.js?v=20260821b"></script>
-  <script src="admin/admin.js?v=20260823b"></script>
+  <script src="admin/admin.js?v=20260908b"></script>
 </body>
 </html>
