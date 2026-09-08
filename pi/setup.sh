@@ -146,6 +146,10 @@ if [[ "$SKIP_APT" -eq 1 ]]; then
 fi
 "$DIR/install.sh" "${INSTALL_ARGS[@]}"
 
+if [[ -x "$DIR/harden.sh" ]]; then
+  "$DIR/harden.sh" || echo "harden.sh varnade — dörrtjänsten installeras ändå." >&2
+fi
+
 echo "==> Skriver /etc/vkk-rental-door.env (BCM ${GPIO_PIN}, active-high)"
 CONFIG_ARGS=(
   --set "API_URL=${API_URL}"

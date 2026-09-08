@@ -42,6 +42,36 @@ Nyckel = Worker-secret `DOOR_API_KEY` (sätts med `npx wrangler secret put DOOR_
 
 Hål 25 på headern är GND.
 
+## Stabilitet (UPS täcker ström — det här täcker OS)
+
+Pi Zero W:s vanliga självmål är **Wi-Fi som somnar**, **SD-kortet fylls av loggar**, **tjänsten ger upp efter kraschloop**, och **fel klocka** (TLS mot Worker). `./setup.sh` kör `harden.sh` som:
+
+- stänger av Wi-Fi power save
+- begränsar journald till 50 MB
+- sätter kernel-watchdog + systemd-watchdog på dörrtjänsten (omstart om den hänger)
+- väntar på nätverk innan tjänsten startar
+- slår på timesyncd / fake-hwclock
+
+Dörrlyssnaren backar av vid API-fel (upp till 60 s) och ger inte upp.
+
+Gör också, en gång per Pi:
+
+1. **Lite OS** — Raspberry Pi OS **Lite**, ingen desktop.
+2. **Bra microSD** (A2, känd tillverkare). Undvik no-name. SD-korruption är den vanliga “den dog bara”.
+3. **Inte `sudo rpi-update`**, inte slumpmässiga `full-upgrade` mitt i säsong. `./setup.sh` räcker för vår kod. OS-uppdateringar medvetet, sen `./setup.sh`.
+4. **Statiskt DHCP-lån** på routern för Pi:ns MAC så DNS/Wi-Fi inte byter identitet.
+5. **Ingen overlay/read-only** krävs, men om du vill maxa SD-livslängd: `raspi-config` → performance → overlay file system (då måste du stänga av overlay för att köra `./setup.sh`).
+6. **USB-kabeln till UPS** ska tåla ström (kort, tjock). Undervoltage ger freeze även med batteri.
+
+Kolla hälsa:
+
+```bash
+vcgencmd get_throttled    # 0x0 = bra (ingen throttle/undervoltage)
+iw dev wlan0 get power_save
+sudo systemctl status vkk-rental-door
+sudo journalctl -u vkk-rental-door -n 30 --no-pager
+```
+
 ## Felsökning
 
 ```bash

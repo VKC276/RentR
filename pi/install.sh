@@ -57,8 +57,7 @@ echo "==> Python venv (system-site-packages so apt python3-lgpio is visible)"
 python3 -m venv --system-site-packages "$VENV"
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
-pip install --upgrade pip
-pip install -r "$DIR/requirements.txt"
+pip install -q -r "$DIR/requirements.txt"
 
 if ! "$VENV/bin/python" -c "import gpiozero" 2>/dev/null; then
   echo "VARNING: gpiozero hittades inte. Reläet går i dry-run tills paketet finns." >&2
@@ -97,16 +96,23 @@ sudo tee "$UNIT_PATH" >/dev/null <<EOF
 Description=VKK Rental door relay listener
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=90
 User=${USER_NAME}
 Group=${USER_NAME}
 WorkingDirectory=${DIR}
 Environment=ENV_FILE=${ENV_FILE}
-ExecStart=${VENV}/bin/python ${DIR}/door_listener.py
+Environment=PYTHONUNBUFFERED=1
+ExecStart=${VENV}/bin/python -u ${DIR}/door_listener.py
 Restart=always
-RestartSec=5
+RestartSec=3
+TimeoutStartSec=120
+TimeoutStopSec=15
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 import time
 import urllib.error
@@ -90,6 +91,7 @@ API_KEY = os.environ.get("PI_API_KEY", "").strip().strip("'").strip('"')
 RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "1")
 DEFAULT_PULSE_MS = int(os.environ.get("PULSE_MS", "1000"))
 POLL_SEC = float(os.environ.get("POLL_SEC", "2.5"))
+ERROR_BACKOFF_MAX = float(os.environ.get("ERROR_BACKOFF_MAX", "60"))
 
 # BCM ↔ physical pin on the 40-pin header. Same map on Pi Zero W, 3, 4 and 5.
 # gpiozero integers are BCM; "BOARD22" is the hole you count on the header.
@@ -179,6 +181,23 @@ GPIO_PIN, HEADER_PIN, GPIOZERO_SPEC = resolve_pins(
     os.environ.get("HEADER_PIN", ""),
     os.environ.get("GPIO_PIN", "25"),
 )
+
+
+def sd_notify(message: str) -> None:
+    """Tell systemd we are alive (READY=1 / WATCHDOG=1). No-op without NOTIFY_SOCKET."""
+    addr = os.environ.get("NOTIFY_SOCKET", "").strip()
+    if not addr:
+        return
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        if addr.startswith("@"):
+            target = "\0" + addr[1:]
+        else:
+            target = addr
+        sock.sendto(message.encode("utf-8"), target)
+        sock.close()
+    except OSError:
+        pass
 
 
 def api_call(action: str, **extra):
@@ -272,26 +291,38 @@ def main() -> None:
     print(f"Poll every {POLL_SEC}s · fallback pulse {DEFAULT_PULSE_MS}ms", flush=True)
     relay = Relay()
     print("Listening for Open door…", flush=True)
+    sd_notify("READY=1")
 
+    backoff = POLL_SEC
     try:
         while True:
+            sd_notify("WATCHDOG=1")
             try:
                 data = api_call("pollDoor")
+                backoff = POLL_SEC
                 cmd = data.get("command") if isinstance(data, dict) else None
                 if cmd:
                     cmd_id = cmd.get("id")
                     pulse = int(cmd.get("pulseMs") or DEFAULT_PULSE_MS)
                     print(f"Command {cmd_id} → pulse {pulse}ms", flush=True)
                     relay.pulse(pulse)
-                    api_call("completeDoor", commandId=cmd_id)
-                    print(f"Command {cmd_id} marked done", flush=True)
+                    try:
+                        api_call("completeDoor", commandId=cmd_id)
+                        print(f"Command {cmd_id} marked done", flush=True)
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"completeDoor failed ({exc}) — retry next poll", file=sys.stderr, flush=True)
             except Exception as exc:  # noqa: BLE001
                 print(f"Poll error: {exc}", file=sys.stderr, flush=True)
-            time.sleep(POLL_SEC)
+                backoff = min(ERROR_BACKOFF_MAX, max(POLL_SEC, backoff * 2))
+            sd_notify("WATCHDOG=1")
+            time.sleep(backoff)
     except KeyboardInterrupt:
         print("\nStopped", flush=True)
     finally:
-        relay.close()
+        try:
+            relay.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 if __name__ == "__main__":
