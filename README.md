@@ -79,9 +79,35 @@ Sheets round trips dominate response time, so the backend avoids them where it c
 - `updateObjectById_` writes the whole row in one call rather than one call per field.
 - Schema creation runs once, guarded by the `SCHEMA_READY` script property.
 
-## 3. Raspberry Pi
+## 3. Raspberry Pi (dörrrelä)
 
-See [pi/README.md](pi/README.md).
+Pi Zero W pollar Workern och pulsar reläet på **BCM 25** (hål 22, active-high).
+
+**Första install på Pi:n**
+
+1. På datorn: `npx wrangler secret put DOOR_API_KEY` (samma nyckel till Pi:n).
+2. På Pi:n:
+
+```bash
+cd ~
+git clone https://github.com/VKC276/RentR.git
+cd ~/RentR/pi
+./setup.sh 'DIN_DOOR_API_KEY'
+sudo reboot
+```
+
+3. `./setup.sh --test` ska ge `OK`. Tjänst: `vkk-rental-door`.
+
+**Uppdatera Pi:n efter push till main**
+
+```bash
+cd ~/RentR/pi
+./setup.sh
+```
+
+Worker-ändringar (dörrkö, timeout) kräver dessutom `npx wrangler deploy` från en inloggad dator.
+
+Full kabeldragning, stabilitet och felsökning: [pi/README.md](pi/README.md).
 
 ## Status flow
 

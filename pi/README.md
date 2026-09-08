@@ -7,30 +7,81 @@ Pi   → pollDoor → BCM 25 → completeDoor
 
 Relä: **BCM 25** (hål 22), **active-high** (pin låg i vila).
 
-## Install / uppdatering
+## Installation (första gången)
+
+På Pi:n, med internet och `git` installerat (Raspberry Pi OS Lite).
+
+**1. Sätt samma dörrnyckel i Cloudflare Worker** (på din dator, i repot, inloggad med wrangler):
+
+```bash
+npx wrangler secret put DOOR_API_KEY
+```
+
+Klistra in en lång slumpnyckel. Samma värde ska till Pi:n i steg 3.
+
+**2. Klona koden på Pi:n:**
+
+```bash
+cd ~
+git clone https://github.com/VKC276/RentR.git
+cd ~/RentR/pi
+```
+
+**3. Installera och starta** (klistra in samma nyckel som i steg 1):
+
+```bash
+./setup.sh 'DIN_DOOR_API_KEY'
+```
+
+Det gör venv, systemd-tjänsten `vkk-rental-door`, Wi-Fi/watchdog-stabilisering och startar lyssnaren. Första gången: **starta om Pi:n en gång** (`sudo reboot`) så kernel-watchdog slår.
+
+**4. Kolla att det lever:**
+
+```bash
+./setup.sh --test
+sudo systemctl status vkk-rental-door
+iw dev wlan0 get power_save
+```
+
+`--test` ska sluta med `OK`. `power_save` ska vara `off`. `status` ska vara `active (running)`.
+
+**5. Deploya Worker** när dörrlogik i molnet har ändrats (på datorn, inte på Pi:n):
+
+```bash
+git pull
+npx wrangler deploy
+```
+
+Utan steg 5 får Pi:n ny kod, men kön/timeout i molnet är oförändrad.
+
+## Uppdatering (senare)
+
+När ni har puschat till `main`:
+
+```bash
+cd ~/RentR/pi
+./setup.sh
+```
+
+Det räcker. Scriptet gör `git pull`, installerar om och startar om tjänsten. Nyckeln i `/etc/vkk-rental-door.env` behålls.
+
+Ny dörrnyckel:
+
+```bash
+./setup.sh 'NY_DOOR_API_KEY'
+```
+
+Kontrollera att Pi:n fick `main`:
 
 ```bash
 cd ~/RentR
-git pull
-cd pi
-./setup.sh 'DIN_DOOR_API_KEY'
+git fetch origin
+git checkout main
+git pull origin main
+git log -1 --oneline
 ```
 
-Första gången, om repot inte finns:
-
-```bash
-git clone https://github.com/VKC276/RentR.git
-cd ~/RentR/pi
-./setup.sh 'DIN_DOOR_API_KEY'
-```
-
-`./setup.sh` gör git pull, venv, systemd (`vkk-rental-door`) och skriver nyckeln. Utan argument (när nyckeln redan finns):
-
-```bash
-cd ~/RentR/pi && ./setup.sh
-```
-
-Nyckel = Worker-secret `DOOR_API_KEY` (sätts med `npx wrangler secret put DOOR_API_KEY`).
+`git status` som säger “up to date” utan `git fetch` kan ljuga — den jämför mot senast hämtade origin.
 
 ## Kabel
 
@@ -42,7 +93,7 @@ Nyckel = Worker-secret `DOOR_API_KEY` (sätts med `npx wrangler secret put DOOR_
 
 Hål 25 på headern är GND.
 
-Dörrkommandon lever **30 sekunder**. Äldre pending kasseras. Vid wifi-lucka töms inte en kö av slag — max **en** puls (senaste giltiga trycket). Worker måste vara deployad för det.
+Dörrkommandon lever **30 sekunder**. Äldre pending kasseras. Vid wifi-lucka töms inte en kö av slag — max **en** puls (senaste giltiga trycket). Kräver att Workern är deployad.
 
 ## Stabilitet (UPS täcker ström — det här täcker OS)
 
