@@ -16,6 +16,12 @@ function openDoor_(token) {
   if (!flags.showOpenDoor) throw softError_('Open door är inte tillgänglig', 403);
 
   var ttl = Number(getConfig_('doorCommandTtlSec', '30'));
+  expireDoorCommands_();
+  readAllObjects_(SHEET_NAMES.DoorCommands).forEach(function (c) {
+    if (c.status === 'pending') {
+      updateObjectById_(SHEET_NAMES.DoorCommands, c.id, { status: 'expired' });
+    }
+  });
   var cmd = {
     id: uid_(),
     bookingId: b.id,
@@ -62,19 +68,26 @@ function pollDoorCommand_(apiKey) {
   requirePiKey_(apiKey);
   expireDoorCommands_();
   var cmds = readAllObjects_(SHEET_NAMES.DoorCommands);
-  for (var i = 0; i < cmds.length; i++) {
-    var c = cmds[i];
+  var newest = null;
+  cmds.forEach(function (c) {
     if (c.status === 'pending' && new Date(c.expiresAt).getTime() >= Date.now()) {
-      return {
-        command: {
-          id: c.id,
-          bookingId: c.bookingId,
-          pulseMs: Number(getConfig_('relayPulseMs', '1000'))
-        }
-      };
+      if (!newest || String(c.createdAt) > String(newest.createdAt)) newest = c;
     }
-  }
-  return { command: null };
+  });
+  if (!newest) return { command: null };
+  cmds.forEach(function (c) {
+    if (c.status === 'pending' && c.id !== newest.id) {
+      updateObjectById_(SHEET_NAMES.DoorCommands, c.id, { status: 'expired' });
+    }
+  });
+  return {
+    command: {
+      id: newest.id,
+      bookingId: newest.bookingId,
+      expiresAt: newest.expiresAt,
+      pulseMs: Number(getConfig_('relayPulseMs', '1000'))
+    }
+  };
 }
 
 function completeDoorCommand_(apiKey, commandId) {

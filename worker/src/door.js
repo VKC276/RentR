@@ -93,6 +93,9 @@ async function createDoorCommand(db, bookingOrPassId, ttlSec) {
   const id = uid();
   const now = nowIso();
   const expiresAt = new Date(Date.now() + ttlSec * 1000).toISOString();
+  // One physical door: a new press invalidates older pending pulses
+  // so a wifi gap cannot drain a queue of strikes.
+  await db.prepare(`UPDATE door_commands SET status = 'expired' WHERE status = 'pending'`).run();
   await db
     .prepare(
       `INSERT INTO door_commands (id, booking_id, status, created_at, consumed_at, expires_at)
@@ -250,19 +253,26 @@ export async function pollDoor(env, apiKey) {
 
   const cmd = await db
     .prepare(
-      `SELECT id, booking_id AS bookingId FROM door_commands
+      `SELECT id, booking_id AS bookingId, expires_at AS expiresAt FROM door_commands
        WHERE status = 'pending' AND expires_at >= ?
-       ORDER BY created_at LIMIT 1`
+       ORDER BY created_at DESC LIMIT 1`
     )
     .bind(now)
     .first();
 
   if (!cmd) return { command: null };
+
+  await db
+    .prepare(`UPDATE door_commands SET status = 'expired' WHERE status = 'pending' AND id != ?`)
+    .bind(cmd.id)
+    .run();
+
   const cfg = await getConfigMap(db);
   return {
     command: {
       id: cmd.id,
       bookingId: cmd.bookingId,
+      expiresAt: cmd.expiresAt,
       pulseMs: Number(cfg.relayPulseMs || 1000),
     },
   };
@@ -271,10 +281,18 @@ export async function pollDoor(env, apiKey) {
 export async function completeDoor(env, apiKey, commandId) {
   requirePiKey(env, apiKey);
   const cmd = await env.DB
-    .prepare(`SELECT id FROM door_commands WHERE id = ?`)
+    .prepare(`SELECT id, status, expires_at AS expiresAt FROM door_commands WHERE id = ?`)
     .bind(commandId)
     .first();
   if (!cmd) throw softError('Kommando saknas', 404);
+  if (cmd.status === 'expired' || (cmd.expiresAt && cmd.expiresAt < nowIso())) {
+    await env.DB
+      .prepare(`UPDATE door_commands SET status = 'expired' WHERE id = ? AND status = 'pending'`)
+      .bind(commandId)
+      .run();
+    return { ok: true, skipped: true, reason: 'expired' };
+  }
+  if (cmd.status === 'done') return { ok: true };
   await env.DB
     .prepare(`UPDATE door_commands SET status = 'done', consumed_at = ? WHERE id = ?`)
     .bind(nowIso(), commandId)

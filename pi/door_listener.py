@@ -28,6 +28,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_API_URL = "https://rentr-api.muddy-rice-38d4.workers.dev"
@@ -183,6 +184,20 @@ GPIO_PIN, HEADER_PIN, GPIOZERO_SPEC = resolve_pins(
 )
 
 
+def _command_expired(cmd: dict) -> bool:
+    raw = cmd.get("expiresAt") or cmd.get("expires_at") or ""
+    if not raw:
+        return False
+    text = str(raw).strip().replace("Z", "+00:00")
+    try:
+        exp = datetime.fromisoformat(text)
+    except ValueError:
+        return False
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) >= exp
+
+
 def sd_notify(message: str) -> None:
     """Tell systemd we are alive (READY=1 / WATCHDOG=1). No-op without NOTIFY_SOCKET."""
     addr = os.environ.get("NOTIFY_SOCKET", "").strip()
@@ -303,6 +318,13 @@ def main() -> None:
                 cmd = data.get("command") if isinstance(data, dict) else None
                 if cmd:
                     cmd_id = cmd.get("id")
+                    if _command_expired(cmd):
+                        print(f"Command {cmd_id} expired — skip pulse", flush=True)
+                        try:
+                            api_call("completeDoor", commandId=cmd_id)
+                        except Exception as exc:  # noqa: BLE001
+                            print(f"completeDoor: {exc}", file=sys.stderr, flush=True)
+                        continue
                     pulse = int(cmd.get("pulseMs") or DEFAULT_PULSE_MS)
                     print(f"Command {cmd_id} → pulse {pulse}ms", flush=True)
                     relay.pulse(pulse)
