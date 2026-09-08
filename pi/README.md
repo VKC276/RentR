@@ -23,7 +23,7 @@ Ny Pi utan att klona först:
 curl -fsSL https://raw.githubusercontent.com/VKC276/RentR/main/pi/bootstrap.sh | bash -s -- --key 'DIN_DOOR_API_KEY'
 ```
 
-Det kommandot: klonar vid behov, installerar venv + systemd (`vkk-rental-door`), skriver `/etc/vkk-rental-door.env` (GPIO **25**, active-low) och startar tjänsten.
+Det kommandot: klonar vid behov, installerar venv + systemd (`vkk-rental-door`), skriver `/etc/vkk-rental-door.env` (GPIO **25**, active-high) och startar tjänsten.
 
 ```bash
 # Samma script, bara inställningar (ingen ominstall)
@@ -55,7 +55,7 @@ cd ~/RentR/pi
 
 ```bash
 ./configure.sh --set PI_API_KEY=dinNyckel --restart --test
-./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=0 --restart
+./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=1 --restart
 ./configure.sh --show
 ```
 
@@ -111,7 +111,7 @@ Pin **25** på headern är **GND** — inte GPIO 25.
 
 Om IN-kabeln sitter kvar på hål **11** styr scriptet fel pin. Active-low-reläer drar då **hela tiden**. Antingen flytta IN till hål **22**, eller `./bootstrap.sh --skip-install --header-pin 11`.
 
-Reläet ska vara **av** när tjänsten körs och ingen har tryckt Öppna dörr. Om det fortfarande drar med kabeln på hål 22: prova `--active-high`.
+Reläet ska vara **av** när tjänsten körs och ingen har tryckt Öppna dörr. Standard är **active-high** (BCM 25 låg i vila). Om reläet drar i vila: `./bootstrap.sh --skip-install --active-low`.
 
 ## Secrets
 

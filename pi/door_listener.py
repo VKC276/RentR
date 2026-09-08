@@ -13,7 +13,7 @@ Required env:
 Optional env:
   GPIO_PIN=25           # BCM number (gpiozero default)
   HEADER_PIN=22         # physical 40-pin header hole; if set, gpiozero uses BOARD*
-  RELAY_ACTIVE_HIGH=0   # 0 = active-low (most 5V relay boards)
+  RELAY_ACTIVE_HIGH=1   # 1 = active-high (this relay); 0 = active-low
   PULSE_MS=1000         # fallback if Worker omits pulseMs
   POLL_SEC=2.5
   ENV_FILE=/etc/vkk-rental-door.env
@@ -87,7 +87,7 @@ bootstrap_env()
 
 API_URL = os.environ.get("API_URL", DEFAULT_API_URL).rstrip("/")
 API_KEY = os.environ.get("PI_API_KEY", "").strip().strip("'").strip('"')
-RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "0")
+RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "1")
 DEFAULT_PULSE_MS = int(os.environ.get("PULSE_MS", "1000"))
 POLL_SEC = float(os.environ.get("POLL_SEC", "2.5"))
 

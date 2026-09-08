@@ -20,7 +20,7 @@ Interactive (default):
 
 Non-interactive:
   ./configure.sh --set PI_API_KEY=yourSecret
-  ./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=0
+  ./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=1
   ./configure.sh --set HEADER_PIN=22
   ./configure.sh --show
   ./configure.sh --test
@@ -54,7 +54,7 @@ read_env() {
   PI_API_KEY=""
   GPIO_PIN="25"
   HEADER_PIN=""
-  RELAY_ACTIVE_HIGH="0"
+  RELAY_ACTIVE_HIGH="1"
   PULSE_MS="1000"
   POLL_SEC="2.5"
 
@@ -186,7 +186,7 @@ show_env() {
   echo "  PI_API_KEY        = $(mask_key "$PI_API_KEY")"
   echo "  HEADER_PIN        = ${HEADER_PIN:-?}  (fysiskt hål 1–40 på headern)"
   echo "  GPIO_PIN          = $GPIO_PIN  (BCM, gpiozero-nummer — samma på Zero W och Pi 5)"
-  echo "  RELAY_ACTIVE_HIGH = $RELAY_ACTIVE_HIGH  (0=active-low, idle pin HIGH)"
+  echo "  RELAY_ACTIVE_HIGH = $RELAY_ACTIVE_HIGH  (1=active-high, idle pin LOW)"
   echo "  PULSE_MS          = $PULSE_MS"
   echo "  POLL_SEC          = $POLL_SEC"
 }

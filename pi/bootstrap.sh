@@ -12,7 +12,7 @@ REPO_URL="${REPO_URL:-https://github.com/VKC276/RentR.git}"
 CLONE_DIR="${CLONE_DIR:-$HOME/RentR}"
 DEFAULT_API_URL="https://rentr-api.muddy-rice-38d4.workers.dev"
 DEFAULT_GPIO_PIN="25"
-DEFAULT_RELAY_ACTIVE_HIGH="0"
+DEFAULT_RELAY_ACTIVE_HIGH="1"
 DEFAULT_PULSE_MS="1000"
 DEFAULT_POLL_SEC="2.5"
 
@@ -36,7 +36,7 @@ usage() {
 Usage: ./bootstrap.sh --key DIN_NYCKEL [options]
 
 Installerar dörrlyssnaren och skriver inställningar i ett kommando.
-Standard: Raspberry Pi Zero W, GPIO BCM ${DEFAULT_GPIO_PIN} (fysisk pin 22), active-low.
+Standard: Raspberry Pi Zero W, GPIO BCM ${DEFAULT_GPIO_PIN} (fysisk pin 22), active-high.
 
 Required (ny install, eller om nyckeln saknas):
   --key, --api-key VALUE   Samma värde som Worker-secret DOOR_API_KEY
@@ -45,8 +45,8 @@ Settings:
   --api-url URL            Worker-URL (default: ${DEFAULT_API_URL})
   --gpio N                 BCM-nummer (gpiozero; samma på Zero W och Pi 5)
   --header-pin N           Fysiskt hål 1–40 på headern (22 = BCM 25). gpiozero får BOARDN.
-  --active-low             Relä active-low (default)
-  --active-high            Relä active-high
+  --active-high            Relä active-high (default; idle = pin LOW)
+  --active-low             Relä active-low (idle = pin HIGH)
   --pulse-ms N             Puls om Worker inte skickar pulseMs (default: ${DEFAULT_PULSE_MS})
   --poll-sec N             Poll-intervall sekunder (default: ${DEFAULT_POLL_SEC})
 
