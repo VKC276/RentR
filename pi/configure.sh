@@ -93,13 +93,27 @@ mask_key() {
   echo "${k:0:3}…${k: -3} (len=${#k})"
 }
 
+physical_pin() {
+  case "${1:-}" in
+    17) echo 11 ;;
+    25) echo 22 ;;
+    27) echo 13 ;;
+    22) echo 15 ;;
+    23) echo 16 ;;
+    24) echo 18 ;;
+    18) echo 12 ;;
+    4) echo 7 ;;
+    *) echo "?" ;;
+  esac
+}
+
 show_env() {
   read_env
   echo "Fil: $ENV_FILE"
   echo "  API_URL           = $API_URL"
   echo "  PI_API_KEY        = $(mask_key "$PI_API_KEY")"
-  echo "  GPIO_PIN          = $GPIO_PIN"
-  echo "  RELAY_ACTIVE_HIGH = $RELAY_ACTIVE_HIGH"
+  echo "  GPIO_PIN          = $GPIO_PIN  (BCM, fysisk pin $(physical_pin "$GPIO_PIN"))"
+  echo "  RELAY_ACTIVE_HIGH = $RELAY_ACTIVE_HIGH  (0=active-low, idle pin HIGH)"
   echo "  PULSE_MS          = $PULSE_MS"
   echo "  POLL_SEC          = $POLL_SEC"
 }

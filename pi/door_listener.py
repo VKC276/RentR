@@ -91,6 +91,41 @@ RELAY_ACTIVE_HIGH = env_bool("RELAY_ACTIVE_HIGH", "0")
 DEFAULT_PULSE_MS = int(os.environ.get("PULSE_MS", "1000"))
 POLL_SEC = float(os.environ.get("POLL_SEC", "2.5"))
 
+# BCM → physical pin on the 40-pin header (Pi Zero W / Pi 3/4/5).
+BCM_PHYSICAL = {
+    2: 3,
+    3: 5,
+    4: 7,
+    17: 11,
+    27: 13,
+    22: 15,
+    10: 19,
+    9: 21,
+    11: 23,
+    5: 29,
+    6: 31,
+    13: 33,
+    19: 35,
+    26: 37,
+    14: 8,
+    15: 10,
+    18: 12,
+    23: 16,
+    24: 18,
+    25: 22,
+    8: 24,
+    7: 26,
+    12: 32,
+    16: 36,
+    20: 38,
+    21: 40,
+}
+
+
+def physical_pin(bcm: int) -> str:
+    n = BCM_PHYSICAL.get(int(bcm))
+    return str(n) if n else "?"
+
 
 def api_call(action: str, **extra):
     """POST JSON to the Worker (same contract as the web client)."""
@@ -138,7 +173,10 @@ class Relay:
         try:
             self._dev = _load_gpio_device()
             mode = "active-high" if RELAY_ACTIVE_HIGH else "active-low"
-            print(f"GPIO ready on BCM{GPIO_PIN} ({mode})", flush=True)
+            print(
+                f"GPIO ready on BCM{GPIO_PIN} = fysisk pin {physical_pin(GPIO_PIN)} ({mode}, idle=off)",
+                flush=True,
+            )
         except ImportError:
             print("gpiozero not available — dry-run mode (no hardware pulse)", flush=True)
         except Exception as exc:  # noqa: BLE001
@@ -148,7 +186,7 @@ class Relay:
     def pulse(self, pulse_ms: int) -> None:
         ms = max(50, int(pulse_ms))
         if self._dev is None:
-            print(f"[dry-run] pulse {ms}ms on BCM{GPIO_PIN}", flush=True)
+            print(f"[dry-run] pulse {ms}ms on BCM{GPIO_PIN} (fysisk pin {physical_pin(GPIO_PIN)})", flush=True)
             time.sleep(ms / 1000.0)
             return
         self._dev.on()

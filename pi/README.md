@@ -84,11 +84,22 @@ cd ~/RentR/pi
 
 ## Kabeldragning (Pi Zero W)
 
+**BCM 25 är inte samma pin som BCM 17.** På 40-pinners headern:
+
+| BCM (mjukvara) | Fysisk pin (räkna på kortet) |
+|----------------|------------------------------|
+| **25** (nu) | **22** — jämna raden, 11:e pinnen från SD-kort-änden (pin 2 = 5V … 22) |
+| 17 (gamla Pi 5-paketet) | **11** — udda raden, 6:e pinnen från SD-kort-änden (pin 1 = 3.3V … 11) |
+
 | Relämodul | Pi Zero W |
 |-----------|-----------|
 | VCC | 5V (fysisk pin 2 eller 4) |
 | GND | GND (fysisk pin 6) |
 | IN | BCM **25** = fysisk pin **22** |
+
+Om IN-kabeln sitter kvar på pin **11** styr scriptet fel pin. Active-low-reläer drar då **hela tiden** (GPIO 17 ligger låg när den inte initieras). Flytta IN till pin **22**, eller kör `./configure.sh --set GPIO_PIN=17 --restart` om du vill behålla den gamla kabeln.
+
+Reläet ska vara **av** när tjänsten körs och ingen har tryckt Öppna dörr. Om det fortfarande drar med kabeln på pin 22: prova `./bootstrap.sh --skip-install --gpio 25 --active-high` (vissa kort är high-level trigger).
 
 ## Secrets
 
