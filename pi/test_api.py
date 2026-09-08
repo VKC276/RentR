@@ -19,7 +19,7 @@ def main() -> None:
     key = dl.API_KEY
     if not key:
         print(
-            "PI_API_KEY saknas. Sätt med ./configure.sh eller i /etc/vkk-rental-door.env",
+            "PI_API_KEY saknas. Kör: ./setup.sh 'DIN_DOOR_API_KEY'",
             file=sys.stderr,
             flush=True,
         )
@@ -40,16 +40,16 @@ def main() -> None:
         if "401" in err or "Unauthorized" in err:
             print(
                 "Nyckeln på Pi:n matchar inte Worker-secret DOOR_API_KEY.\n"
-                "Sätt samma värde på båda:\n"
+                "Samma värde på båda:\n"
                 "  printf '%s' 'NYCKEL' | npx wrangler secret put DOOR_API_KEY\n"
-                "  ./bootstrap.sh --skip-install --key 'NYCKEL' --gpio 25 --test",
+                "  ./setup.sh 'NYCKEL'",
                 file=sys.stderr,
                 flush=True,
             )
         else:
             print(
                 "Tips: samma ASCII-nyckel i Worker DOOR_API_KEY och /etc/vkk-rental-door.env; "
-                "kolla API_URL och nätverk. Kör: ./configure.sh --show",
+                "kolla API_URL och nätverk. Kör: ./setup.sh --show",
                 file=sys.stderr,
                 flush=True,
             )

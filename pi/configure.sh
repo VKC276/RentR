@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Interactive helper to view/edit /etc/vkk-rental-door.env without nano.
+# Env helper used by setup.sh — not the main Pi command.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,16 +15,13 @@ usage() {
   cat <<EOF
 Usage: ./configure.sh [options]
 
-Interactive (default):
-  ./configure.sh
-
-Non-interactive:
+Non-interactive (anropas av setup.sh):
   ./configure.sh --set PI_API_KEY=yourSecret
-  ./configure.sh --set GPIO_PIN=25 --set RELAY_ACTIVE_HIGH=1
-  ./configure.sh --set HEADER_PIN=22
   ./configure.sh --show
   ./configure.sh --test
   ./configure.sh --restart
+
+För install/uppdatering: ./setup.sh 'DIN_DOOR_API_KEY'
 
 Options:
   --show           Show current settings (API key masked)
@@ -217,71 +214,9 @@ EOF
   echo "Sparat → $ENV_FILE"
 }
 
-prompt_value() {
-  local label="$1"
-  local current="$2"
-  local input
-  if [[ -n "$current" ]]; then
-    read -r -p "$label [$current]: " input || true
-  else
-    read -r -p "$label: " input || true
-  fi
-  if [[ -n "${input:-}" ]]; then
-    echo "$input"
-  else
-    echo "$current"
-  fi
-}
-
-interactive() {
-  read_env
-  echo
-  echo "=== VKK Rental — konfigurera dörr (.env) ==="
-  echo "Enter = behåll nuvarande värde"
-  echo
-  API_URL="$(prompt_value "API_URL" "$API_URL")"
-  echo "PI_API_KEY nu: $(mask_key "$PI_API_KEY")"
-  local new_key
-  read -r -p "PI_API_KEY (klistra in ny, eller Enter behåll): " new_key || true
-  if [[ -n "${new_key:-}" ]]; then
-    PI_API_KEY="$new_key"
-  fi
-  GPIO_PIN="$(prompt_value "GPIO_PIN BCM (eller Enter och sätt HEADER_PIN)" "$GPIO_PIN")"
-  HEADER_PIN="$(prompt_value "HEADER_PIN fysisk hål 1-40 (22=BCM25, 11=BCM17)" "${HEADER_PIN:-$(physical_pin "$GPIO_PIN")}")"
-  sync_pins
-  RELAY_ACTIVE_HIGH="$(prompt_value "RELAY_ACTIVE_HIGH (0=active-low, 1=active-high)" "$RELAY_ACTIVE_HIGH")"
-  PULSE_MS="$(prompt_value "PULSE_MS" "$PULSE_MS")"
-  POLL_SEC="$(prompt_value "POLL_SEC" "$POLL_SEC")"
-
-  echo
-  show_env
-  echo
-  read -r -p "Spara? [Y/n] " ans || true
-  ans="${ans:-Y}"
-  if [[ "$ans" =~ ^[Nn] ]]; then
-    echo "Avbrutet."
-    exit 0
-  fi
-  write_env
-
-  read -r -p "Testa API nu? [Y/n] " ans || true
-  ans="${ans:-Y}"
-  if [[ ! "$ans" =~ ^[Nn] ]]; then
-    run_test || true
-  fi
-
-  if systemctl list-unit-files "$SERVICE_NAME.service" >/dev/null 2>&1; then
-    read -r -p "Starta om tjänsten ${SERVICE_NAME}? [Y/n] " ans || true
-    ans="${ans:-Y}"
-    if [[ ! "$ans" =~ ^[Nn] ]]; then
-      restart_service
-    fi
-  fi
-}
-
 run_test() {
   if [[ ! -x "$DIR/.venv/bin/python" ]]; then
-    echo "Venv saknas. Kör först: ./install.sh --enable" >&2
+    echo "Venv saknas. Kör först: ./setup.sh" >&2
     return 1
   fi
   ENV_FILE="$ENV_FILE" "$DIR/.venv/bin/python" "$DIR/test_api.py"
@@ -296,33 +231,32 @@ SET_ARGS=()
 DO_SHOW=0
 DO_TEST=0
 DO_RESTART=0
-DO_INTERACTIVE=1
+
+if [[ $# -eq 0 ]]; then
+  echo "Använd ./setup.sh 'DIN_DOOR_API_KEY'"
+  echo
+  usage
+  exit 1
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --show) DO_SHOW=1; DO_INTERACTIVE=0 ;;
-    --test) DO_TEST=1; DO_INTERACTIVE=0 ;;
-    --restart) DO_RESTART=1; DO_INTERACTIVE=0 ;;
+    --show) DO_SHOW=1 ;;
+    --test) DO_TEST=1 ;;
+    --restart) DO_RESTART=1 ;;
     --set)
       shift
       [[ $# -gt 0 ]] || { echo "--set requires KEY=VALUE" >&2; exit 1; }
       SET_ARGS+=("$1")
-      DO_INTERACTIVE=0
       ;;
     --set=*)
       SET_ARGS+=("${1#--set=}")
-      DO_INTERACTIVE=0
       ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
   shift
 done
-
-if [[ "$DO_INTERACTIVE" -eq 1 ]]; then
-  interactive
-  exit 0
-fi
 
 if [[ ${#SET_ARGS[@]} -gt 0 ]]; then
   read_env

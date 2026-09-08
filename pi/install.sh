@@ -11,26 +11,23 @@ SERVICE_NAME="vkk-rental-door"
 LEGACY_SERVICE="rentr-door"
 ENABLE_SERVICE=0
 SKIP_APT=0
-RUN_CONFIGURE=0
 
 usage() {
   cat <<EOF
 Usage: ./install.sh [options]
 
 Options:
-  --enable      Install and enable systemd service (starts on boot)
-  --configure   Run ./configure.sh after install (env helper, no nano)
-  --skip-apt    Do not apt-install python3-venv / python3-lgpio
+  --enable      Enable systemd service (starts on boot)
+  --skip-apt    Skip apt-get
   -h, --help    Show this help
 
-New Pi tip: ./bootstrap.sh --key DIN_NYCKEL   (install + GPIO 25 + systemd)
+Använd ./setup.sh 'DIN_DOOR_API_KEY' — inte det här scriptet.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --enable) ENABLE_SERVICE=1 ;;
-    --configure) RUN_CONFIGURE=1 ;;
     --skip-apt) SKIP_APT=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -122,20 +119,4 @@ if [[ "$ENABLE_SERVICE" -eq 1 ]]; then
   sudo systemctl enable "$SERVICE_NAME"
   sudo systemctl restart "$SERVICE_NAME"
   sudo systemctl --no-pager --full status "$SERVICE_NAME" || true
-else
-  echo "==> Service unit installed"
-  echo "    Start:   sudo systemctl enable --now ${SERVICE_NAME}"
-  echo "    Logs:    sudo journalctl -u ${SERVICE_NAME} -f"
 fi
-
-if [[ "$RUN_CONFIGURE" -eq 1 ]]; then
-  echo "==> configure.sh"
-  "$DIR/configure.sh"
-fi
-
-echo
-echo "Klart."
-echo "  Konfigurera:  $DIR/configure.sh"
-echo "  Testa API:    $VENV/bin/python $DIR/test_api.py"
-echo "  Loggar:       sudo journalctl -u ${SERVICE_NAME} -f"
-echo "  Uppdatera:    $DIR/update.sh --enable"
