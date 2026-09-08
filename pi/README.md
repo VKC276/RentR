@@ -46,7 +46,7 @@ Hål 25 på headern är GND.
 
 Pi Zero W:s vanliga självmål är **Wi-Fi som somnar**, **SD-kortet fylls av loggar**, **tjänsten ger upp efter kraschloop**, och **fel klocka** (TLS mot Worker). `./setup.sh` kör `harden.sh` som:
 
-- stänger av Wi-Fi power save
+- stänger av Wi-Fi power save **vid varje reconnect** (AP/router-bortfall slår annars på det igen)
 - begränsar journald till 50 MB
 - sätter kernel-watchdog + systemd-watchdog på dörrtjänsten (omstart om den hänger)
 - väntar på nätverk innan tjänsten startar

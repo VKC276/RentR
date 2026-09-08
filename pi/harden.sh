@@ -40,37 +40,82 @@ append_boot_cfg() {
 
 append_boot_cfg "dtparam=watchdog=on"
 
-# --- Wi-Fi power save: klassisk Zero W-död (wlan somnar, poll slutar) ---
-if command -v iw >/dev/null 2>&1 && iw dev wlan0 info >/dev/null 2>&1; then
-  sudo iw dev wlan0 set power_save off || true
-fi
-if [[ -d /etc/NetworkManager/conf.d ]]; then
+# --- Wi-Fi power save: Zero W sätter ON igen efter varje reconnect ---
+wifi_ps_off() {
+  command -v iw >/dev/null 2>&1 || return 0
+  local dev
+  for dev in /sys/class/net/wlan*; do
+    [[ -e "$dev" ]] || continue
+    sudo iw dev "$(basename "$dev")" set power_save off 2>/dev/null || true
+  done
+}
+wifi_ps_off
+
+if [[ -d /etc/NetworkManager ]] || command -v NetworkManager >/dev/null 2>&1; then
+  sudo mkdir -p /etc/NetworkManager/conf.d
   sudo tee /etc/NetworkManager/conf.d/vkk-wifi-powersave-off.conf >/dev/null <<'EOF'
 [connection]
 wifi.powersave = 2
 EOF
+  if command -v nmcli >/dev/null 2>&1; then
+    while IFS=: read -r name type; do
+      [[ "$type" == *wireless* ]] || continue
+      sudo nmcli connection modify "$name" 802-11-wireless.powersave 2 2>/dev/null || true
+    done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null || true)
+  fi
+  sudo mkdir -p /etc/NetworkManager/dispatcher.d
+  sudo tee /etc/NetworkManager/dispatcher.d/99-vkk-wifi-powersave >/dev/null <<'EOF'
+#!/bin/sh
+# Turn power save off on every wlan up (router/AP bounce resets it to on).
+IFACE="${1:-}"
+ACTION="${2:-}"
+echo "$IFACE" | grep -q '^wlan' || exit 0
+case "$ACTION" in
+  up|dhcp4-change|connectivity-change|dhcp6-change) ;;
+  *) exit 0 ;;
+esac
+command -v iw >/dev/null || exit 0
+iw dev "$IFACE" set power_save off || true
+exit 0
+EOF
+  sudo chmod 755 /etc/NetworkManager/dispatcher.d/99-vkk-wifi-powersave
   sudo systemctl try-reload-or-restart NetworkManager 2>/dev/null || true
 fi
 
-# Persist powersave after each wlan up
+sudo tee /etc/systemd/system/vkk-wifi-powersave.service >/dev/null <<'EOF'
+[Unit]
+Description=Disable Wi-Fi power save (VKK Rental door)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'for d in /sys/class/net/wlan*; do [ -e "$d" ] || continue; iw dev "$(basename "$d")" set power_save off || true; done'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now vkk-wifi-powersave.service 2>/dev/null || true
+
 sudo mkdir -p /etc/networkd-dispatcher/routable.d 2>/dev/null || true
 if [[ -d /etc/networkd-dispatcher/routable.d ]]; then
   sudo tee /etc/networkd-dispatcher/routable.d/vkk-wifi-powersave >/dev/null <<'EOF'
 #!/bin/sh
-[ "$IFACE" = "wlan0" ] || exit 0
-command -v iw >/dev/null && iw dev wlan0 set power_save off || true
+echo "${IFACE:-}" | grep -q '^wlan' || exit 0
+command -v iw >/dev/null && iw dev "$IFACE" set power_save off || true
 exit 0
 EOF
   sudo chmod +x /etc/networkd-dispatcher/routable.d/vkk-wifi-powersave
 fi
 
-# dhcpcd hook (older Pi OS)
 if [[ -d /etc/dhcpcd.exit-hooks.d ]]; then
   sudo tee /etc/dhcpcd.exit-hooks.d/vkk-wifi-powersave >/dev/null <<'EOF'
 #!/bin/sh
 [ "$reason" = "BOUND" ] || [ "$reason" = "RENEW" ] || exit 0
-[ "$interface" = "wlan0" ] || exit 0
-command -v iw >/dev/null && iw dev wlan0 set power_save off || true
+echo "${interface:-}" | grep -q '^wlan' || exit 0
+command -v iw >/dev/null && iw dev "$interface" set power_save off || true
 EOF
   sudo chmod +x /etc/dhcpcd.exit-hooks.d/vkk-wifi-powersave
 fi
