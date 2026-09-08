@@ -1,5 +1,5 @@
-import { softError, nowIso, uid, randomHex } from './util.js';
-import { hashPassword, sanitizeUser, revokeSessionsForUser } from './auth.js';
+import { softError, nowIso, uid, randomHex, isValidEmail } from './util.js';
+import { hashPassword, sanitizeUser, revokeSessionsForUser, issuePasswordReset } from './auth.js';
 
 export async function listUsers(db) {
   const { results } = await db
@@ -20,14 +20,21 @@ async function countActiveAdmins(db) {
 export async function createUser(env, payload) {
   const db = env.DB;
   const email = String(payload.email || '').trim().toLowerCase();
-  if (!email || !payload.password || !payload.firstName || !payload.lastName) {
-    throw softError('Alla fält krävs', 400);
+  if (!email || !payload.firstName || !payload.lastName) {
+    throw softError('Namn och e-post krävs', 400);
   }
+  if (!isValidEmail(email)) throw softError('Ogiltig e-postadress', 400);
   const existing = await db.prepare(`SELECT id FROM users WHERE lower(email) = ?`).bind(email).first();
   if (existing) throw softError('E-post används redan', 400);
 
+  const password = String(payload.password || '');
+  const sendInvite = !password;
+  if (password && password.length < 8) {
+    throw softError('Lösenordet måste vara minst 8 tecken', 400);
+  }
+
   const salt = randomHex(16);
-  const passwordHash = await hashPassword(env, payload.password, salt);
+  const passwordHash = await hashPassword(env, password || randomHex(24), salt);
   const now = nowIso();
   const id = uid();
   await db
@@ -50,7 +57,18 @@ export async function createUser(env, payload) {
     .prepare(`SELECT id, email, first_name, last_name, role, active FROM users WHERE id = ?`)
     .bind(id)
     .first();
-  return sanitizeUser(row);
+  const user = sanitizeUser(row);
+  if (sendInvite) {
+    try {
+      await issuePasswordReset(env, user, 'invite');
+    } catch (err) {
+      throw softError(
+        'Användaren skapades men inbjudan kunde inte skickas: ' + (err.message || String(err)),
+        500
+      );
+    }
+  }
+  return user;
 }
 
 export async function updateUser(env, userId, payload) {
@@ -118,6 +136,7 @@ export async function deleteUser(env, userId) {
     throw softError('Sista aktiva admin kan inte raderas', 400);
   }
   await revokeSessionsForUser(env, userId);
+  await db.prepare(`DELETE FROM password_resets WHERE user_id = ?`).bind(userId).run();
   await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
   return { ok: true };
 }

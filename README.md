@@ -15,7 +15,8 @@ Booking system for Västerviks klätterklubb — **GitHub Pages** UI + **Cloudfl
 - Guest magic link + lookup by number + email
 - Pricing per day + discount tiers (days / pads)
 - i18n: Swedish / English / German
-- Admin users with hashed passwords (last admin protected)
+- Admin users (e-postinloggning, hashed passwords, last admin protected)
+- Password reset / invite via e-post (`/admin/#reset=…`, giltig en timme)
 - Hand-out flow, paid toggle, self pickup/return Open door
 - Confirm return after Open door; then Open door is removed
 - Admin door-only email links (name + validity dates → page with only Open door)

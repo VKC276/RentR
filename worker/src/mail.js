@@ -38,6 +38,11 @@ const MAIL_I18N = {
     labelOpenAdmin: 'Öppna admin',
     labelOpen: 'Öppna dörr',
     labelValid: 'Giltig',
+    resetSubject: 'Återställ lösenord',
+    resetIntro: 'Du kan sätta ett nytt lösenord via knappen nedan. Länken gäller i en timme. Har du inte begärt detta kan du strunta i mejlet.',
+    inviteSubject: 'Ditt ClimbLink-konto',
+    inviteIntro: 'Ett administratörskonto har skapats åt dig. Sätt ditt lösenord via knappen nedan. Länken gäller i en timme.',
+    labelSetPassword: 'Välj lösenord',
     daysNote: 'Start- och slutdatum räknas som hela dygn.',
     payNote: 'Betalning sker enligt överenskommelse / på plats.',
     greeting: 'Hej {{name}},',
@@ -71,6 +76,11 @@ const MAIL_I18N = {
     labelOpenAdmin: 'Open admin',
     labelOpen: 'Open door',
     labelValid: 'Valid',
+    resetSubject: 'Reset your password',
+    resetIntro: 'Set a new password with the button below. The link is valid for one hour. If you did not ask for this, you can ignore the email.',
+    inviteSubject: 'Your ClimbLink account',
+    inviteIntro: 'An administrator account was created for you. Set your password with the button below. The link is valid for one hour.',
+    labelSetPassword: 'Choose password',
     daysNote: 'Start and end dates each count as a full day.',
     payNote: 'Payment is arranged separately / on site.',
     greeting: 'Hi {{name}},',
@@ -104,6 +114,11 @@ const MAIL_I18N = {
     labelOpenAdmin: 'Admin öffnen',
     labelOpen: 'Tür öffnen',
     labelValid: 'Gültig',
+    resetSubject: 'Passwort zurücksetzen',
+    resetIntro: 'Setzen Sie ein neues Passwort über die Schaltfläche unten. Der Link gilt eine Stunde. Wenn Sie dies nicht angefordert haben, ignorieren Sie die E-Mail.',
+    inviteSubject: 'Ihr ClimbLink-Konto',
+    inviteIntro: 'Für Sie wurde ein Administratorkonto erstellt. Setzen Sie Ihr Passwort über die Schaltfläche unten. Der Link gilt eine Stunde.',
+    labelSetPassword: 'Passwort wählen',
     daysNote: 'Start- und Enddatum zählen als volle Tage.',
     payNote: 'Zahlung erfolgt nach Absprache / vor Ort.',
     greeting: 'Hallo {{name}},',
@@ -445,4 +460,18 @@ export async function mailDoorPass(env, pass, url) {
     ctaUrl: url,
   });
   await sendMessages(env, [toMessage(pass.recipientEmail, msg)]);
+}
+
+export async function mailPasswordReset(env, user, url, kind) {
+  const locale = 'sv';
+  const name = ((user.firstName || user.first_name || '') + ' ' + (user.lastName || user.last_name || '')).trim() || 'admin';
+  const invite = kind === 'invite';
+  const msg = compose(locale, {
+    subject: t(locale, invite ? 'inviteSubject' : 'resetSubject'),
+    intro: t(locale, invite ? 'inviteIntro' : 'resetIntro'),
+    vars: { name },
+    ctaLabel: t(locale, 'labelSetPassword'),
+    ctaUrl: url,
+  });
+  await sendMessages(env, [toMessage(user.email, msg)]);
 }
