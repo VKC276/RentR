@@ -21,7 +21,6 @@ export async function getPublicConfig(db) {
   const pads = await loadActivePads(db);
   const pricingRules = await loadPricingRules(db);
   return {
-    appName: cfg.appName || 'ClimbLink',
     currency: cfg.currency || 'SEK',
     defaultPricePerDay: Number(cfg.defaultPricePerDay || 150),
     pagesBaseUrl: (cfg.pagesBaseUrl || '').replace(/\/$/, ''),

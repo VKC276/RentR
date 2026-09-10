@@ -93,9 +93,8 @@ async function createDoorCommand(db, bookingOrPassId, ttlSec) {
   const id = uid();
   const now = nowIso();
   const expiresAt = new Date(Date.now() + ttlSec * 1000).toISOString();
-  // One physical door: a new press invalidates older pending pulses
-  // so a wifi gap cannot drain a queue of strikes.
-  await db.prepare(`UPDATE door_commands SET status = 'expired' WHERE status = 'pending'`).run();
+  // One live pulse only — old rows are discarded, never kept as history.
+  await db.prepare(`DELETE FROM door_commands`).run();
   await db
     .prepare(
       `INSERT INTO door_commands (id, booking_id, status, created_at, consumed_at, expires_at)
@@ -243,60 +242,32 @@ export async function pollDoor(env, apiKey) {
   requirePiKey(env, apiKey);
   const db = env.DB;
   const now = nowIso();
-  await db
-    .prepare(
-      `UPDATE door_commands SET status = 'expired'
-       WHERE status = 'pending' AND expires_at < ?`
-    )
-    .bind(now)
-    .run();
 
   const cmd = await db
     .prepare(
-      `SELECT id, booking_id AS bookingId, expires_at AS expiresAt FROM door_commands
-       WHERE status = 'pending' AND expires_at >= ?
-       ORDER BY created_at DESC LIMIT 1`
+      `SELECT id, booking_id AS bookingId, expires_at AS expiresAt FROM door_commands LIMIT 1`
     )
-    .bind(now)
     .first();
 
   if (!cmd) return { command: null };
 
-  await db
-    .prepare(`UPDATE door_commands SET status = 'expired' WHERE status = 'pending' AND id != ?`)
-    .bind(cmd.id)
-    .run();
+  if (cmd.expiresAt < now) {
+    await db.prepare(`DELETE FROM door_commands WHERE id = ?`).bind(cmd.id).run();
+    return { command: null };
+  }
 
-  const cfg = await getConfigMap(db);
   return {
     command: {
       id: cmd.id,
       bookingId: cmd.bookingId,
       expiresAt: cmd.expiresAt,
-      pulseMs: Number(cfg.relayPulseMs || 1000),
     },
   };
 }
 
 export async function completeDoor(env, apiKey, commandId) {
   requirePiKey(env, apiKey);
-  const cmd = await env.DB
-    .prepare(`SELECT id, status, expires_at AS expiresAt FROM door_commands WHERE id = ?`)
-    .bind(commandId)
-    .first();
-  if (!cmd) throw softError('Kommando saknas', 404);
-  if (cmd.status === 'expired' || (cmd.expiresAt && cmd.expiresAt < nowIso())) {
-    await env.DB
-      .prepare(`UPDATE door_commands SET status = 'expired' WHERE id = ? AND status = 'pending'`)
-      .bind(commandId)
-      .run();
-    return { ok: true, skipped: true, reason: 'expired' };
-  }
-  if (cmd.status === 'done') return { ok: true };
-  await env.DB
-    .prepare(`UPDATE door_commands SET status = 'done', consumed_at = ? WHERE id = ?`)
-    .bind(nowIso(), commandId)
-    .run();
+  await env.DB.prepare(`DELETE FROM door_commands WHERE id = ?`).bind(commandId).run();
   return { ok: true };
 }
 
