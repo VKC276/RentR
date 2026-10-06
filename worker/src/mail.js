@@ -144,7 +144,7 @@ function manageUrl(pagesBaseUrl, token) {
 }
 
 function adminUrl() {
-  return 'https://wallflow.vastervikclimbing.se/uthyrning.html';
+  return 'https://wallflow.vastervikclimbing.se/#uthyrning';
 }
 
 function escapeHtml(s) {

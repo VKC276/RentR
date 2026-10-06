@@ -121,7 +121,7 @@ const BRIDGE_ACTIONS = new Set([
 async function route(env, action, body, ctx, request) {
   const bridge = !!(
     request &&
-    secretsMatch(request.headers.get('X-Rental-Bridge-Secret') || '', env.RENTAL_BRIDGE_SECRET || '')
+    secretsMatch(request.headers.get('X-Rental-Bridge-Secret') || '', String(env.RENTAL_BRIDGE_SECRET || '').trim())
   );
   if (bridge && !BRIDGE_ACTIONS.has(action)) {
     throw softError('Otillåten åtgärd', 403);
