@@ -202,7 +202,7 @@
     });
   }
 
-  // The wordmark is in the HTML (logo + ClimbLink). Titles still use i18n.
+  // The wordmark is in the HTML (logo + WallFlow). Titles still use i18n.
   function useConfig(cfg) {
     state.config = cfg;
   }

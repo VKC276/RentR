@@ -1,11 +1,13 @@
 /**
  * Gmail relay for Cloudflare Worker.
  *
- * POST body: { action: 'relayMail', secret, messages: [{ to, subject, body, html? }] }
+ * POST body: { action: 'relayMail', secret, messages: [{ to, subject, body, html?, attachments? }] }
+ * attachments: [{ filename|name, mimeType|type, content }] där content är base64.
  * Script property MAIL_WEBHOOK_SECRET must match Worker MAIL_WEBHOOK_SECRET.
  */
 
 var MAIL_FROM_NAME = 'Västerviks klätterklubb';
+var MAIL_MAX_ATTACHMENT_CHARS = 3500000;
 
 function mailJson_(obj, status) {
   var out = obj || {};
@@ -46,7 +48,7 @@ function handleMailRelay_(body) {
       return;
     }
     try {
-      sendRelayMessage_(to, subject, text, html);
+      sendRelayMessage_(to, subject, text, html, m.attachments);
       sent++;
     } catch (err) {
       errors.push(to + ': ' + String(err && err.message ? err.message : err));
@@ -65,19 +67,77 @@ function handleMailRelay_(body) {
   return mailJson_({ ok: true, sent: sent, errors: [] });
 }
 
-function sendRelayMessage_(to, subject, text, html) {
-  if (!text) text = subject;
-  var opts = { name: MAIL_FROM_NAME };
+function decodeRelayAttachments_(raw) {
+  var list = Array.isArray(raw) ? raw : [];
+  var blobs = [];
+  var i;
+  for (i = 0; i < list.length; i++) {
+    var blob = attachmentToBlob_(list[i]);
+    if (blob) blobs.push(blob);
+  }
+  return blobs;
+}
+
+function normalizeB64_(raw) {
+  var s = String(raw || '')
+    .replace(/^data:[^;]+;base64,/, '')
+    .replace(/\s/g, '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  var pad = s.length % 4;
+  if (pad === 1) throw new Error('Ogiltig base64 i bilaga');
+  if (pad) s += '===='.slice(pad);
+  return s;
+}
+
+function sanitizeAttachName_(raw) {
+  var name = String(raw || 'bilaga.pdf').replace(/[\\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+  if (!name) name = 'bilaga.pdf';
+  if (name.length > 80) name = name.slice(0, 80);
+  if (!/\.[a-zA-Z0-9]{2,8}$/.test(name)) name += '.pdf';
+  return name;
+}
+
+function attachmentToBlob_(a) {
+  a = a || {};
+  var name = sanitizeAttachName_(a.filename || a.name);
+  var mime = String(a.mimeType || a.type || 'application/pdf').split(';')[0].trim() || 'application/pdf';
+  var raw = a.content != null ? a.content : (a.data != null ? a.data : a.bytes);
+  var bytes;
   try {
-    if (html) {
-      opts.htmlBody = html;
-      GmailApp.sendEmail(to, subject, text, opts);
+    if (Array.isArray(raw)) {
+      bytes = raw;
     } else {
-      GmailApp.sendEmail(to, subject, text, opts);
+      var b64 = normalizeB64_(raw);
+      if (!b64) return null;
+      if (b64.length > MAIL_MAX_ATTACHMENT_CHARS) {
+        throw new Error('Bilagan är för stor');
+      }
+      bytes = Utilities.base64Decode(b64);
     }
   } catch (err) {
-    if (html) {
-      GmailApp.sendEmail(to, subject, text, { name: MAIL_FROM_NAME });
+    throw new Error('Kunde inte läsa bilaga ' + name + ': ' + String(err && err.message ? err.message : err));
+  }
+  if (typeof bytes.length === 'number' && bytes.length === 0) {
+    throw new Error('Tom bilaga: ' + name);
+  }
+  return Utilities.newBlob(bytes, mime, name);
+}
+
+function sendRelayMessage_(to, subject, text, html, attachments) {
+  if (!text) text = subject;
+  var blobs = decodeRelayAttachments_(attachments);
+  var opts = { name: MAIL_FROM_NAME };
+  if (blobs.length) opts.attachments = blobs;
+  if (html) opts.htmlBody = html;
+  try {
+    GmailApp.sendEmail(to, subject, text, opts);
+    return;
+  } catch (err) {
+    Logger.log('GmailApp.sendEmail misslyckades: ' + err);
+    // htmlBody + attachments kan falla i vissa Gmail-konton; prova utan HTML.
+    if (blobs.length && html) {
+      GmailApp.sendEmail(to, subject, text, { name: MAIL_FROM_NAME, attachments: blobs });
       return;
     }
     throw err;

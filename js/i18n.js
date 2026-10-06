@@ -1,7 +1,7 @@
 (function (global) {
   var STR = {
     sv: {
-      appName: 'ClimbLink',
+      appName: 'WallFlow',
       book: 'Boka',
       find: 'Hitta bokning',
       admin: 'Admin',
@@ -131,7 +131,7 @@
       busyRetry: 'Google svarade inte — försöker igen…'
     },
     en: {
-      appName: 'ClimbLink',
+      appName: 'WallFlow',
       book: 'Book',
       find: 'Find booking',
       admin: 'Admin',
@@ -261,7 +261,7 @@
       busyRetry: 'Google did not respond — retrying…'
     },
     de: {
-      appName: 'ClimbLink',
+      appName: 'WallFlow',
       book: 'Buchen',
       find: 'Buchung finden',
       admin: 'Admin',

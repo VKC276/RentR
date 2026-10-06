@@ -86,8 +86,60 @@ function sessionTokenFrom(body) {
   return body.sessionToken || body.token || '';
 }
 
-async function route(env, action, body, ctx) {
+function secretsMatch(a, b) {
+  const enc = new TextEncoder();
+  const left = enc.encode(String(a || ''));
+  const right = enc.encode(String(b || ''));
+  if (!left.length || left.length !== right.length) return false;
+  let diff = 0;
+  for (let i = 0; i < left.length; i++) diff |= left[i] ^ right[i];
+  return diff === 0;
+}
+
+const BRIDGE_ACTIONS = new Set([
+  'adminOverview',
+  'listBookings',
+  'adminUpdateBooking',
+  'deleteBooking',
+  'getRentalStats',
+  'getAdminConfig',
+  'saveAdminConfig',
+  'availablePadsForBooking',
+  'listPads',
+  'updatePad',
+  'createPad',
+  'setPadActive',
+  'listPricingRules',
+  'savePricingRule',
+  'deletePricingRule',
+  'listDoorPasses',
+  'createDoorPass',
+  'revokeDoorPass',
+  'deleteDoorPass',
+]);
+
+async function route(env, action, body, ctx, request) {
+  const bridge = !!(
+    request &&
+    secretsMatch(request.headers.get('X-Rental-Bridge-Secret') || '', env.RENTAL_BRIDGE_SECRET || '')
+  );
+  if (bridge && !BRIDGE_ACTIONS.has(action)) {
+    throw softError('Otillåten åtgärd', 403);
+  }
   const sessionToken = sessionTokenFrom(body);
+  const asAdmin = () => {
+    if (bridge) {
+      return {
+        id: 'wallflow',
+        email: '',
+        firstName: 'WallFlow',
+        lastName: '',
+        role: 'admin',
+        active: true,
+      };
+    }
+    return requireAdmin(env, sessionToken);
+  };
 
   switch (action) {
     case 'ping':
@@ -123,15 +175,15 @@ async function route(env, action, body, ctx) {
     case 'getDoorPass':
       return getDoorPassByToken(env.DB, body.magicToken || body.t);
     case 'createDoorPass':
-      return createAndSendDoorPass(env, body, await requireAdmin(env, sessionToken), ctx);
+      return createAndSendDoorPass(env, body, await asAdmin(), ctx);
     case 'listDoorPasses':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { passes: await listDoorPasses(env.DB) };
     case 'revokeDoorPass':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return revokeDoorPass(env.DB, body.passId || body.id);
     case 'deleteDoorPass':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return deleteDoorPass(env.DB, body.passId || body.id);
 
     case 'login':
@@ -141,7 +193,7 @@ async function route(env, action, body, ctx) {
     case 'resetPassword':
       return resetPasswordWithToken(env, body.token || body.t, body.newPassword || body.password);
     case 'sendUserPasswordReset':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return sendUserPasswordReset(env, body.userId, body.kind);
     case 'logout':
       return logout(env, sessionToken || body.sessionToken);
@@ -155,10 +207,10 @@ async function route(env, action, body, ctx) {
         body.newPassword
       );
     case 'listBookings':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { bookings: await listBookingsAdmin(env.DB, body) };
     case 'adminOverview': {
-      const user = await requireAdmin(env, sessionToken);
+      const user = await asAdmin();
       const overview = await adminOverview(env, body, ctx);
       return Object.assign({ user }, overview);
     }
@@ -167,23 +219,23 @@ async function route(env, action, body, ctx) {
         env,
         body.bookingId,
         body,
-        await requireAdmin(env, sessionToken),
+        await asAdmin(),
         ctx
       );
     case 'deleteBooking':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return deleteBookingAdmin(env.DB, body.bookingId);
     case 'getRentalStats':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return getRentalStatsAdmin(env.DB, body);
     case 'getAdminConfig':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return getAdminConfig(env.DB);
     case 'saveAdminConfig':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return saveAdminConfig(env.DB, body);
     case 'availablePadsForBooking':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return {
         pads: await availablePadsForBooking(env.DB, body.bookingId, {
           startDate: body.startDate,
@@ -191,37 +243,37 @@ async function route(env, action, body, ctx) {
         }),
       };
     case 'listUsers':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { users: await listUsers(env.DB) };
     case 'createUser':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { user: await createUser(env, body) };
     case 'updateUser':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { user: await updateUser(env, body.userId, body) };
     case 'deleteUser':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return deleteUser(env, body.userId);
     case 'listPads':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { pads: await listPadsAdmin(env.DB) };
     case 'updatePad':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { pad: await updatePad(env.DB, body.padId, body) };
     case 'createPad':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { pad: await createPad(env.DB, body) };
     case 'setPadActive':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { pad: await setPadActive(env.DB, body.padId, body.active) };
     case 'listPricingRules':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { rules: await listPricingRulesAdmin(env.DB) };
     case 'savePricingRule':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return { rule: await savePricingRule(env.DB, body) };
     case 'deletePricingRule':
-      await requireAdmin(env, sessionToken);
+      await asAdmin();
       return deletePricingRule(env.DB, body.id);
     case 'pollDoor':
       return pollDoor(env, body.apiKey);
@@ -240,7 +292,7 @@ export default {
     try {
       const body = await readBody(request);
       const action = body.action || 'ping';
-      const result = await route(env, action, body, ctx);
+      const result = await route(env, action, body, ctx, request);
       return json(result);
     } catch (err) {
       const status = err.status || 500;

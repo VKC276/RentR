@@ -6,7 +6,7 @@
 import { statusLabel } from './util.js';
 import { getConfigMap } from './config.js';
 
-const APP_NAME = 'ClimbLink';
+const APP_NAME = 'WallFlow';
 
 const MAIL_I18N = {
   sv: {
@@ -40,7 +40,7 @@ const MAIL_I18N = {
     labelValid: 'Giltig',
     resetSubject: 'Återställ lösenord',
     resetIntro: 'Du kan sätta ett nytt lösenord via knappen nedan. Länken gäller i en timme. Har du inte begärt detta kan du strunta i mejlet.',
-    inviteSubject: 'Ditt ClimbLink-konto',
+    inviteSubject: 'Ditt WallFlow-konto',
     inviteIntro: 'Ett administratörskonto har skapats åt dig. Sätt ditt lösenord via knappen nedan. Länken gäller i en timme.',
     labelSetPassword: 'Välj lösenord',
     daysNote: 'Start- och slutdatum räknas som hela dygn.',
@@ -78,7 +78,7 @@ const MAIL_I18N = {
     labelValid: 'Valid',
     resetSubject: 'Reset your password',
     resetIntro: 'Set a new password with the button below. The link is valid for one hour. If you did not ask for this, you can ignore the email.',
-    inviteSubject: 'Your ClimbLink account',
+    inviteSubject: 'Your WallFlow account',
     inviteIntro: 'An administrator account was created for you. Set your password with the button below. The link is valid for one hour.',
     labelSetPassword: 'Choose password',
     daysNote: 'Start and end dates each count as a full day.',
@@ -116,7 +116,7 @@ const MAIL_I18N = {
     labelValid: 'Gültig',
     resetSubject: 'Passwort zurücksetzen',
     resetIntro: 'Setzen Sie ein neues Passwort über die Schaltfläche unten. Der Link gilt eine Stunde. Wenn Sie dies nicht angefordert haben, ignorieren Sie die E-Mail.',
-    inviteSubject: 'Ihr ClimbLink-Konto',
+    inviteSubject: 'Ihr WallFlow-Konto',
     inviteIntro: 'Für Sie wurde ein Administratorkonto erstellt. Setzen Sie Ihr Passwort über die Schaltfläche unten. Der Link gilt eine Stunde.',
     labelSetPassword: 'Passwort wählen',
     daysNote: 'Start- und Enddatum zählen als volle Tage.',
@@ -143,8 +143,8 @@ function manageUrl(pagesBaseUrl, token) {
   return (pagesBaseUrl || '').replace(/\/$/, '') + '/booking.html?t=' + encodeURIComponent(token || '');
 }
 
-function adminUrl(pagesBaseUrl) {
-  return (pagesBaseUrl || '').replace(/\/$/, '') + '/admin/';
+function adminUrl() {
+  return 'https://wallflow.vastervikclimbing.se/uthyrning.html';
 }
 
 function escapeHtml(s) {
@@ -169,7 +169,7 @@ function bookingVars(booking, magicToken, cfg) {
     status: statusLabel(booking.status, locale),
     email: booking.email,
     url: manageUrl(cfg && cfg.pagesBaseUrl, magicToken || ''),
-    adminUrl: adminUrl(cfg && cfg.pagesBaseUrl),
+    adminUrl: adminUrl(),
     locale,
   };
 }
@@ -337,11 +337,37 @@ export async function sendMessages(env, messages) {
   }
 }
 
-async function adminEmails(db) {
-  const { results } = await db
-    .prepare(`SELECT email FROM users WHERE active = 1 AND role = 'admin'`)
-    .all();
-  return (results || []).map((r) => r.email);
+async function adminEmails(env) {
+  const secret = String((env && env.RENTAL_BRIDGE_SECRET) || '').trim();
+  if (!secret) {
+    console.error('RENTAL_BRIDGE_SECRET saknas — inga mejl till uthyrare');
+    return [];
+  }
+  const init = {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'X-Rental-Bridge-Secret': secret,
+    },
+  };
+  try {
+    let res;
+    if (env.WALLFLOW && typeof env.WALLFLOW.fetch === 'function') {
+      res = await env.WALLFLOW.fetch(new Request('https://wallflow/internal/uthyrare-emails', init));
+    } else {
+      const base = String(env.WALLFLOW_API_URL || 'https://wallflow.muddy-rice-38d4.workers.dev').replace(/\/$/, '');
+      res = await fetch(base + '/internal/uthyrare-emails', init);
+    }
+    const data = await res.json();
+    if (!res.ok || !data || data.ok === false) {
+      console.error('Kunde inte hämta uthyrare', data && data.error ? data.error : res.status);
+      return [];
+    }
+    return (data.emails || []).map((email) => String(email || '').trim()).filter(Boolean);
+  } catch (err) {
+    console.error('Kunde inte hämta uthyrare', String(err && err.message ? err.message : err));
+    return [];
+  }
 }
 
 function toMessage(to, composed) {
@@ -373,7 +399,7 @@ export async function mailBookingCreated(env, booking, magicToken) {
     ctaLabel: t('sv', 'labelOpenAdmin'),
     ctaUrl: v.adminUrl,
   });
-  for (const to of await adminEmails(env.DB)) messages.push(toMessage(to, admin));
+  for (const to of await adminEmails(env)) messages.push(toMessage(to, admin));
   await sendMessages(env, messages);
 }
 
@@ -425,7 +451,7 @@ export async function mailGuestCancelled(env, booking, magicToken) {
     ctaLabel: t('sv', 'labelOpenAdmin'),
     ctaUrl: v.adminUrl,
   });
-  for (const to of await adminEmails(env.DB)) messages.push(toMessage(to, admin));
+  for (const to of await adminEmails(env)) messages.push(toMessage(to, admin));
   await sendMessages(env, messages);
 }
 
@@ -441,7 +467,7 @@ export async function mailAdminChange(env, booking, magicToken) {
     ctaLabel: t('sv', 'labelOpenAdmin'),
     ctaUrl: v.adminUrl,
   });
-  const admins = await adminEmails(env.DB);
+  const admins = await adminEmails(env);
   await sendMessages(env, admins.map((to) => toMessage(to, admin)));
 }
 
